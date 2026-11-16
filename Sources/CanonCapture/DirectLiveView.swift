@@ -78,6 +78,7 @@ public final class DirectLiveView {
     private enum Prop {
         static let evfOutputDevice: UInt32 = 0xD1B0  // bit mask: 1 = camera screen, 2 = PC
         static let evfMode: UInt32 = 0xD1B1          // 1 = live view enabled
+        static let autoLightingOptimizer: UInt32 = 0xD1C1  // 0 standard, 1 low, 2 high, 3 off
     }
 
     private static let canonVendorID: UInt16 = 0x04A9
@@ -100,10 +101,19 @@ public final class DirectLiveView {
     private var liveViewStarted = false
     private var lastHousekeeping = Date.distantPast
     private var lastKeepAwake = Date.distantPast
+    private let turnOffAutoLightingOptimizer: Bool
+    /// The camera's own ALO setting, to put back on close (nil: not changed).
+    private var savedAutoLightingOptimizer: UInt32?
 
     /// Connects to the first Canon camera on USB and starts live view.
     /// Throws `.unsupported` for cameras that need libgphoto2 instead.
-    public init() throws {
+    ///
+    /// With `turnOffAutoLightingOptimizer`, Auto Lighting Optimizer is switched
+    /// off while streaming and restored on `close()`. ALO post-processes every
+    /// live-view frame; on a Rebel T5 it makes the camera miss its 30 Hz frame
+    /// slots, and turning it off takes live view from about 21 to about 28.5 fps.
+    public init(turnOffAutoLightingOptimizer: Bool = true) throws {
+        self.turnOffAutoLightingOptimizer = turnOffAutoLightingOptimizer
         capacity = 1 << 20
         buffer = UnsafeMutableRawPointer.allocate(byteCount: capacity, alignment: 16)
         do {
@@ -164,7 +174,20 @@ public final class DirectLiveView {
         }
         guard claimed == 0 else { throw PTPError(kind: .usb(claimed), action: "claim the USB device") }
 
-        let opening = try transaction(Op.openSession, [1])
+        // A previous run that was killed mid-frame can leave the camera halfway
+        // through a transfer, and it then ignores new commands. Throw away
+        // anything still in flight; if the camera still doesn't answer, reset
+        // its PTP state (a USB class request) and try once more.
+        drainPendingInput(h)
+        var opening: UInt16
+        do {
+            opening = try transaction(Op.openSession, [1])
+        } catch let error as PTPError {
+            guard case let .usb(code) = error.kind, code == LIBUSB_ERROR_TIMEOUT.rawValue else { throw error }
+            resetPTPState(h)
+            transactionID = 0
+            opening = try transaction(Op.openSession, [1])
+        }
         guard opening == Response.ok || opening == Response.sessionAlreadyOpen else {
             throw PTPError(kind: .response(opening), action: "open PTP session")
         }
@@ -176,6 +199,27 @@ public final class DirectLiveView {
         guard needed.allSatisfy(supportedOps.contains) else {
             throw PTPError(kind: .unsupported, action: model.isEmpty ? "connect" : model)
         }
+    }
+
+    /// Reads and discards whatever the camera is still sending from an
+    /// interrupted transaction.
+    private func drainPendingInput(_ handle: OpaquePointer) {
+        for _ in 0..<64 {
+            var received: Int32 = 0
+            let result = libusb_bulk_transfer(
+                handle, endpointIn, buffer.assumingMemoryBound(to: UInt8.self), Int32(capacity & ~511), &received, 100)
+            if result != 0 || received == 0 { break }
+        }
+    }
+
+    /// PTP-over-USB "Device Reset" (class request 0x66), then clears both bulk
+    /// endpoints: brings a camera stuck in a half-finished transaction back.
+    private func resetPTPState(_ handle: OpaquePointer) {
+        _ = libusb_control_transfer(handle, 0x21, 0x66, 0, UInt16(interfaceNumber), nil, 0, 2000)
+        _ = libusb_clear_halt(handle, endpointIn)
+        _ = libusb_clear_halt(handle, endpointOut)
+        usleep(300_000)
+        drainPendingInput(handle)
     }
 
     /// Finds the camera's PTP (still image class) interface and its bulk endpoints.
@@ -205,6 +249,7 @@ public final class DirectLiveView {
         try expect(transaction(Op.setRemoteMode, [1]), "enable remote control")
         try expect(transaction(Op.setEventMode, [1]), "enable camera events")
         _ = try transaction(Op.getEvent)  // the camera reports all its settings once
+        if turnOffAutoLightingOptimizer { try switchOffAutoLightingOptimizer(settings: currentSettings()) }
 
         // Live view on, sent to the PC. Right after connecting the camera can
         // answer "busy" for a moment.
@@ -241,7 +286,7 @@ public final class DirectLiveView {
             // Not ready yet (the camera is metering, focusing, or simply
             // hasn't finished the next frame): ask again shortly.
             if Date() > deadline { throw PTPError(kind: .response(result), action: "wait for live-view frame") }
-            usleep(2_000)
+            usleep(500)
         }
     }
 
@@ -282,6 +327,66 @@ public final class DirectLiveView {
         }
     }
 
+    // MARK: Auto Lighting Optimizer
+
+    private static let autoLightingOptimizerOff: UInt32 = 3
+
+    /// Where the camera's own ALO setting is kept while canon-webcam has it
+    /// switched off, so it can still be restored if canon-webcam is killed
+    /// before it gets the chance (the next run puts it back).
+    private static var savedSettingFile: URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/canon-webcam/auto-lighting-optimizer")
+    }
+
+    private func switchOffAutoLightingOptimizer(settings: [UInt32: UInt32]) throws {
+        guard let current = settings[Prop.autoLightingOptimizer] else { return }  // not on this model
+        // If a previous run was killed while ALO was off, the camera now reports
+        // "off": the setting to restore is the one saved by that run.
+        let saved = (try? String(contentsOf: Self.savedSettingFile, encoding: .utf8))
+            .flatMap { UInt32($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
+        let original = (current == Self.autoLightingOptimizerOff ? saved : nil) ?? current
+        guard original != Self.autoLightingOptimizerOff else {
+            try? FileManager.default.removeItem(at: Self.savedSettingFile)
+            return  // the user keeps ALO off anyway
+        }
+        try? FileManager.default.createDirectory(
+            at: Self.savedSettingFile.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? "\(original)\n".write(to: Self.savedSettingFile, atomically: true, encoding: .utf8)
+        savedAutoLightingOptimizer = original
+        if current != Self.autoLightingOptimizerOff {
+            try expect(setProperty(Prop.autoLightingOptimizer, Self.autoLightingOptimizerOff),
+                       "turn off Auto Lighting Optimizer")
+        }
+    }
+
+    private func restoreAutoLightingOptimizer() {
+        guard let original = savedAutoLightingOptimizer else { return }
+        if (try? setProperty(Prop.autoLightingOptimizer, original)) == Response.ok {
+            savedAutoLightingOptimizer = nil
+            try? FileManager.default.removeItem(at: Self.savedSettingFile)
+        }
+    }
+
+    /// Reads property values from the GetEvent reply in `buffer`: a list of
+    /// records (u32 size, u32 type, ...); type 0xC189 is "property value
+    /// changed" (u32 property, then the value).
+    private func currentSettings() -> [UInt32: UInt32] {
+        var settings: [UInt32: UInt32] = [:]
+        var offset = 12
+        let end = 12 + lastDataLength
+        while offset + 8 <= end {
+            let size = Int(load32(offset))
+            let type = load32(offset + 4)
+            guard size >= 8, offset + size <= end else { break }
+            if type == 0xC189 && size >= 16 {
+                settings[load32(offset + 8)] = load32(offset + 12)
+            }
+            offset += size
+        }
+        return settings
+    }
+
     // MARK: Closing
 
     /// Leaves live view (mirror down, camera screen back on) and releases the
@@ -289,6 +394,7 @@ public final class DirectLiveView {
     public func close() {
         if let handle {
             if sessionOpen {
+                restoreAutoLightingOptimizer()
                 if liveViewStarted && supportedOps.contains(Op.terminateViewfinder) {
                     _ = try? transaction(Op.terminateViewfinder)
                 }

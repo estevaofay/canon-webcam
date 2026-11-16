@@ -29,6 +29,10 @@ public final class LiveView {
     /// Canon models without EOS live view, always use libgphoto2.
     public var preferDirectUSB = true
 
+    /// On the direct-USB path, switch the camera's Auto Lighting Optimizer off
+    /// while streaming (much faster live view) and restore it afterwards.
+    public var turnOffAutoLightingOptimizer = true
+
     /// Called on a delivery thread with every JPEG frame. The capture thread
     /// hands frames over and immediately asks the camera for the next one; if
     /// `onFrame` is still busy with the previous frame, the new one replaces
@@ -143,7 +147,7 @@ public final class LiveView {
                 do { try onConnect(camera) } catch { onEvent(.waiting(reason: "\(error)")) }
                 camera.close()
             }
-            return try DirectLiveView()
+            return try DirectLiveView(turnOffAutoLightingOptimizer: turnOffAutoLightingOptimizer)
         }
         let camera = try EOSCamera()
         guard camera.supportsLiveView else {

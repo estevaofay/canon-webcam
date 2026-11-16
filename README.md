@@ -6,7 +6,7 @@ Canon's EOS Webcam Utility has dropped (or never had) support for many older bod
 
 ```
  Canon DSLR ──USB──▶ canon-webcam ──frames──▶ virtual camera ──▶ Zoom / Meet / FaceTime
-            (live view: ~21 fps JPEG,       (OBS Virtual Camera, or this
+            (live view: ~28 fps JPEG,       (OBS Virtual Camera, or this
              1056×704; sent at 24 fps)       repo's own "Canon Webcam")
 ```
 
@@ -16,7 +16,7 @@ canon-webcam should work with any camera that libgphoto2 can stream live view fr
 
 | Camera | Status |
 | --- | --- |
-| EOS Rebel T5 / 1200D / Kiss X70 | Tested end to end through OBS Virtual Camera: 1056×704, about 21 fps from the camera, sent to apps at a steady 24 fps |
+| EOS Rebel T5 / 1200D / Kiss X70 | Tested end to end through OBS Virtual Camera: 1056×704, about 28 fps from the camera, sent to apps at a steady 24 fps |
 | EOS Rebel T3i / 600D / Kiss X5 | Expected to work (same protocol); not yet tested |
 
 Run `canon-webcam info` to check your camera. If it reports `Live view: supported`, it should work. Reports for other models are welcome.
@@ -68,13 +68,15 @@ If you have a membership:
 ## Usage
 
 ```
-canon-webcam [run] [--camera NAME] [--fit] [--expose] [--fps N] [--gphoto2]
+canon-webcam [run] [--camera NAME] [--fit] [--expose] [--fps N] [--keep-alo] [--gphoto2]
     Stream live view into a virtual camera until Ctrl-C.
     --camera NAME  virtual camera to feed (default "OBS Virtual Camera")
     --fit          show the whole 3:2 frame with side bars (default: crop to 16:9)
     --expose       set 1/60s + ISO Auto on every connect (mode dial on M)
     --fps N        send apps a steady N fps, repeating the newest camera frame
                    when the next isn't ready (default 24; 0 = as they arrive)
+    --keep-alo     leave Auto Lighting Optimizer as set on the camera (by default
+                   it is off while streaming and restored afterwards)
     --gphoto2      read live view through libgphoto2 instead of the faster
                    direct USB path (for troubleshooting)
 canon-webcam check [--camera NAME] [SECONDS]
@@ -87,7 +89,7 @@ canon-webcam cameras          list virtual cameras that accept frames
 canon-webcam info             camera model, live-view support, exposure, battery
 canon-webcam expose           set webcam-friendly exposure: 1/60s, ISO Auto
 canon-webcam snap [FILE]      save one live-view frame as JPEG
-canon-webcam bench [--gphoto2] [SECONDS]
+canon-webcam bench [--keep-alo] [--gphoto2] [SECONDS]
                               measure the live-view frame rate
 ```
 
@@ -96,7 +98,7 @@ If the camera is unplugged, switched off or times out, canon-webcam keeps runnin
 ## Camera tips
 
 - **Exposure.** With the mode dial on **M**, live view shows the exposure you set: at 1/4000s it is almost black. Run `canon-webcam expose` once (1/60s, ISO Auto), or use `--expose`. **P** mode also works.
-- **Frame rate.** A Rebel T5 delivers about 21 live-view frames per second over USB; canon-webcam sends apps a steady 24 fps by repeating the newest frame when the next one isn't ready (`--fps` changes this). Shutter speed, autofocus method and live-view size made no difference in our tests. In auto modes in dim light the camera can slow down, so use **M** and enough light. A true 24–30 new frames per second needs the camera's HDMI output and a capture device.
+- **Frame rate.** A Rebel T5 delivers about 28 live-view frames per second over USB, and canon-webcam sends apps a steady 24 fps (`--fps 30` also works; about one frame in twenty is then a repeat). The camera runs live view on a 30 fps clock, but its **Auto Lighting Optimizer** (ALO) processing makes it miss slots: with ALO on, the T5 manages about 21 fps. canon-webcam therefore switches ALO off while streaming and puts your setting back when it stops; `--keep-alo` leaves it alone. If canon-webcam is force-quit, the next run restores it. Shutter speed, ISO, autofocus method, picture style and live-view size made no real difference in our tests, and movie mode is no faster. A true 30 or 60 needs the camera's HDMI output and a capture device, and on the T5 that output includes the camera's on-screen information.
 - **Focus** once, manually or with a half-press, before you start. These bodies have no continuous autofocus in live view.
 - **Power.** Live view drains the battery in well under an hour. Use an AC dummy battery: Canon ACK-E8 for the T3i (LP-E8), ACK-E10 for the T5 (LP-E10), or a third-party equivalent.
 - **Turn off auto power-off** (camera menu → Auto power off → Disable).
@@ -117,7 +119,7 @@ If the camera is unplugged, switched off or times out, canon-webcam keeps runnin
 
 ## How it works
 
-- `Sources/CanonCapture` talks to the camera. `DirectLiveView` speaks Canon's PTP live-view commands over USB through libusb, asking only for frames (libgphoto2 spends four extra USB round trips per frame, which caps a T5 at about 14 fps). `EOSCamera` wraps libgphoto2 for everything else (`info`, `expose`, `snap`) and for live view on cameras the direct path doesn't support. Both stop `ptpcamerad` before connecting.
+- `Sources/CanonCapture` talks to the camera. `DirectLiveView` speaks Canon's PTP live-view commands over USB through libusb, asking only for frames (libgphoto2 spends four extra USB round trips per frame, which caps a T5 at about 14 fps), and switches off Auto Lighting Optimizer while streaming. `EOSCamera` wraps libgphoto2 for everything else (`info`, `expose`, `snap`) and for live view on cameras the direct path doesn't support. Both stop `ptpcamerad` before connecting.
 - `Sources/VirtualCamera` decodes each JPEG with Core Image into a 1920×1080 BGRA `CVPixelBuffer`, then finds the target camera through CoreMediaIO. It opens the camera's *sink* stream (`CMIOStreamCopyBufferQueue` + `CMIODeviceStartStream`) and enqueues each frame as a `CMSampleBuffer`. The Camera Extension forwards those frames to its *source* stream, which is what video apps read.
 - `Extension/` is a Camera Extension with exactly that sink → source design, written from scratch for this project.
 - `scripts/t5cam.sh` is the original shell prototype, using the `gphoto2` command-line tool and ffmpeg. It is kept as a dependency-light fallback.

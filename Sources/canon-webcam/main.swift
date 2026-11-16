@@ -8,7 +8,7 @@ let usage = """
 canon-webcam: use an old Canon EOS DSLR (Rebel T3i/600D, T5/1200D, ...) as a webcam on macOS.
 
 USAGE
-  canon-webcam [run] [--camera NAME] [--fit] [--expose] [--fps N] [--gphoto2]
+  canon-webcam [run] [--camera NAME] [--fit] [--expose] [--fps N] [--keep-alo] [--gphoto2]
       Stream the DSLR's live view into a virtual camera until Ctrl-C.
       --camera NAME  virtual camera to feed (default: "OBS Virtual Camera";
                      use "Canon Webcam" for this project's own extension)
@@ -17,6 +17,9 @@ USAGE
       --fps N        send video apps a steady N frames per second, repeating the
                      newest camera frame when the next isn't ready (default: 24;
                      0 sends each camera frame as soon as it arrives)
+      --keep-alo     leave Auto Lighting Optimizer as set on the camera. By default
+                     it is switched off while streaming (about 28 instead of 21
+                     fps on a Rebel T5) and restored when canon-webcam stops
       --gphoto2      read live view through libgphoto2 instead of the faster
                      direct USB path (slower; for troubleshooting)
   canon-webcam check [--camera NAME] [SECONDS]
@@ -29,7 +32,7 @@ USAGE
   canon-webcam info             show the connected DSLR and its exposure settings
   canon-webcam expose           set webcam-friendly exposure: 1/60s, ISO Auto
   canon-webcam snap [FILE]      save one live-view frame (default: snap.jpg)
-  canon-webcam bench [--gphoto2] [SECONDS]
+  canon-webcam bench [--keep-alo] [--gphoto2] [SECONDS]
                                 measure live-view frame rate (default: 15s)
 
 """
@@ -45,11 +48,13 @@ func log(_ message: String) {
     fflush(stdout)
 }
 
-/// Runs `body` until Ctrl-C (or until it returns), then calls `cleanup`.
+/// Runs until Ctrl-C (or the terminal closes, or `kill`), then calls `cleanup`
+/// so the camera is left in a clean state.
 func runUntilInterrupted(cleanup: @escaping () -> Void) -> Never {
     signal(SIGINT, SIG_IGN)
     signal(SIGTERM, SIG_IGN)
-    let sources = [SIGINT, SIGTERM].map { sig -> DispatchSourceSignal in
+    signal(SIGHUP, SIG_IGN)  // the terminal window was closed
+    let sources = [SIGINT, SIGTERM, SIGHUP].map { sig -> DispatchSourceSignal in
         let source = DispatchSource.makeSignalSource(signal: sig, queue: .main)
         source.setEventHandler {
             print("")
@@ -176,7 +181,7 @@ final class LatestFrame {
     }
 }
 
-func run(cameraName: String, mode: FrameRenderer.Mode, expose: Bool, fps: Double, direct: Bool) -> Never {
+func run(cameraName: String, mode: FrameRenderer.Mode, expose: Bool, fps: Double, direct: Bool, keepALO: Bool) -> Never {
     ensureCameraAccess()
     let connection = SinkConnection(cameraName: cameraName)
     do { try connection.open() } catch { fail("\(error)") }
@@ -187,6 +192,7 @@ func run(cameraName: String, mode: FrameRenderer.Mode, expose: Bool, fps: Double
     let stats = FrameStats()
     let live = LiveView()
     live.preferDirectUSB = direct
+    live.turnOffAutoLightingOptimizer = !keepALO
     let counterLock = NSLock()
     var cameraFrames = 0
     let latest = LatestFrame()
@@ -417,11 +423,12 @@ func snap(_ path: String) {
     } catch { fail("\(error)") }
 }
 
-func bench(seconds: Double, direct: Bool) -> Never {
+func bench(seconds: Double, direct: Bool, keepALO: Bool) -> Never {
     let stats = FrameStats()
     let renderer = FrameRenderer()
     let live = LiveView()
     live.preferDirectUSB = direct
+    live.turnOffAutoLightingOptimizer = !keepALO
     var connectedAt: Date?
     live.onEvent = { event in
         switch event {
@@ -462,6 +469,7 @@ case "run":
     var exposeOnConnect = false
     var fps = 24.0
     var direct = true
+    var keepALO = false
     var i = 0
     while i < args.count {
         switch args[i] {
@@ -471,6 +479,7 @@ case "run":
         case "--fit": mode = .fit
         case "--expose": exposeOnConnect = true
         case "--gphoto2": direct = false
+        case "--keep-alo": keepALO = true
         case "--fps":
             guard i + 1 < args.count, let value = Double(args[i + 1]), value >= 0, value <= 60 else {
                 fail("--fps needs a number from 0 to 60")
@@ -481,7 +490,7 @@ case "run":
         }
         i += 1
     }
-    run(cameraName: cameraName, mode: mode, expose: exposeOnConnect, fps: fps, direct: direct)
+    run(cameraName: cameraName, mode: mode, expose: exposeOnConnect, fps: fps, direct: direct, keepALO: keepALO)
 case "check":
     var cameraName = "OBS Virtual Camera"
     var seconds = 15.0
@@ -513,12 +522,14 @@ case "snap": snap(args.first ?? "snap.jpg")
 case "bench":
     var seconds = 15.0
     var direct = true
+    var keepALO = false
     for arg in args {
         if arg == "--gphoto2" { direct = false }
+        else if arg == "--keep-alo" { keepALO = true }
         else if let s = Double(arg) { seconds = s }
         else { fail("unknown option \(arg)\n\n\(usage)") }
     }
-    bench(seconds: seconds, direct: direct)
+    bench(seconds: seconds, direct: direct, keepALO: keepALO)
 case "help", "-h", "--help": print(usage)
 default: fail("unknown command \(command)\n\n\(usage)")
 }
