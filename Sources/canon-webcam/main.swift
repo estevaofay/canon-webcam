@@ -1,3 +1,4 @@
+import AVFoundation
 import CanonCapture
 import Foundation
 import VirtualCamera
@@ -12,6 +13,9 @@ USAGE
                      use "Canon Webcam" for this project's own extension)
       --fit          show the whole 3:2 frame with side bars (default: crop to 16:9)
       --expose       set 1/60s and ISO Auto on connect (mode dial on M)
+  canon-webcam check [--camera NAME] [SECONDS]
+      Feed the virtual camera and read it back like a video app would, to
+      confirm the DSLR's frames come out the other side (default: 15s).
   canon-webcam cameras          list virtual cameras that accept frames
   canon-webcam info             show the connected DSLR and its exposure settings
   canon-webcam expose           set webcam-friendly exposure: 1/60s, ISO Auto
@@ -47,7 +51,9 @@ func runUntilInterrupted(cleanup: @escaping () -> Void) -> Never {
         return source
     }
     _ = sources
-    dispatchMain()
+    // A real CFRunLoop, not dispatchMain(): CoreMediaIO's client side delivers
+    // queued frames to the camera extension from the main run loop.
+    while true { CFRunLoopRun() }
 }
 
 final class FrameStats {
@@ -77,6 +83,31 @@ final class FrameStats {
     }
 }
 
+/// Virtual cameras are cameras: macOS only lets an app send frames to (or
+/// read from) one after the user allows camera access. For a command-line
+/// tool the permission belongs to the app it runs in (Terminal, iTerm, ...).
+/// Without it, CoreMediaIO silently delivers nothing.
+func ensureCameraAccess() {
+    switch AVCaptureDevice.authorizationStatus(for: .video) {
+    case .authorized:
+        return
+    case .notDetermined:
+        log("asking macOS for camera access (needed to feed a virtual camera)…")
+        let done = DispatchSemaphore(value: 0)
+        var granted = false
+        AVCaptureDevice.requestAccess(for: .video) { granted = $0; done.signal() }
+        done.wait()
+        if granted { return }
+        fallthrough
+    default:
+        fail("""
+            camera access is not allowed for the app running canon-webcam, so macOS blocks it from \
+            feeding a virtual camera. Allow it in System Settings > Privacy & Security > Camera \
+            (for Terminal, iTerm, ...), then run canon-webcam again.
+            """)
+    }
+}
+
 func setWebcamExposure(_ camera: EOSCamera) throws {
     try camera.setSetting("shutterspeed", "1/60")
     try camera.setSetting("iso", "Auto")
@@ -85,6 +116,7 @@ func setWebcamExposure(_ camera: EOSCamera) throws {
 // MARK: - Commands
 
 func run(cameraName: String, mode: FrameRenderer.Mode, expose: Bool) -> Never {
+    ensureCameraAccess()
     let sink: VirtualCameraSink
     do { sink = try VirtualCameraSink(cameraNamed: cameraName) } catch { fail("\(error)") }
     log("feeding \"\(sink.camera.name)\" (\(mode.rawValue) mode). Ctrl-C to stop.")
@@ -99,10 +131,13 @@ func run(cameraName: String, mode: FrameRenderer.Mode, expose: Bool) -> Never {
         case let .waiting(reason): log("waiting: \(reason)")
         }
     }
+    var renderFailures = 0
     live.onFrame = { jpeg in
         if let frame = renderer.render(jpeg: jpeg) {
             sink.send(frame)
             stats.frame()
+        } else {
+            renderFailures += 1
         }
     }
     live.start()
@@ -113,6 +148,10 @@ func run(cameraName: String, mode: FrameRenderer.Mode, expose: Bool) -> Never {
     timer.schedule(deadline: .now() + 10, repeating: 10)
     timer.setEventHandler {
         let s = stats.take()
+        if ProcessInfo.processInfo.environment["CANON_WEBCAM_DEBUG"] != nil {
+            let depth = sink.queueDepth
+            log("debug: queue \(depth.count)/\(depth.capacity), render failures \(renderFailures)")
+        }
         guard s.frames > 0 else { return }
         let sent = sink.sent - lastSent, dropped = sink.dropped - lastDropped
         lastSent = sink.sent; lastDropped = sink.dropped
@@ -126,6 +165,69 @@ func run(cameraName: String, mode: FrameRenderer.Mode, expose: Bool) -> Never {
         live.stop()
         sink.stop()
     }
+}
+
+func check(cameraName: String, seconds: Double) -> Never {
+    ensureCameraAccess()
+    let sink: VirtualCameraSink
+    let reader: VirtualCameraReader
+    do {
+        sink = try VirtualCameraSink(cameraNamed: cameraName)
+        reader = try VirtualCameraReader(cameraNamed: cameraName)
+    } catch { fail("\(error)") }
+
+    let renderer = FrameRenderer()
+    let live = LiveView()
+    let lock = NSLock()
+    var cameraFrames = 0
+    live.onEvent = { event in
+        switch event {
+        case let .connected(model): log("camera connected: \(model)")
+        case let .waiting(reason): log("waiting: \(reason)")
+        }
+    }
+    live.onFrame = { jpeg in
+        guard let frame = renderer.render(jpeg: jpeg) else { return }
+        lock.withLock {
+            sink.send(frame)
+            cameraFrames += 1
+        }
+    }
+    log("feeding \"\(cameraName)\" and reading it back for \(Int(seconds))s…")
+    live.start()
+
+    var ours = 0, other = 0
+    let start = Date()
+    let poll = DispatchSource.makeTimerSource(queue: .main)
+    poll.schedule(deadline: .now(), repeating: 0.01)
+    poll.setEventHandler {
+        let ids = reader.drain()
+        lock.withLock {
+            for id in ids {
+                if id != 0 && sink.sentSurfaceIDs.contains(id) { ours += 1 } else { other += 1 }
+            }
+        }
+        guard Date().timeIntervalSince(start) >= seconds else { return }
+        poll.cancel()
+        live.stop()
+        reader.stop()
+        sink.stop()
+        print("""
+
+            camera frames sent:            \(cameraFrames)
+            frames out of "\(cameraName)": \(ours + other)
+              - the DSLR's own frames:    \(ours) (\(String(format: "%.1f", Double(ours) / seconds)) fps)
+              - other (placeholder etc.): \(other)
+            """)
+        if ours > 0 {
+            print("PASS: video apps using \"\(cameraName)\" see the DSLR.")
+            exit(0)
+        }
+        print("FAIL: no DSLR frames came out of \"\(cameraName)\".")
+        exit(1)
+    }
+    poll.resume()
+    runUntilInterrupted { live.stop(); reader.stop(); sink.stop() }
 }
 
 func listCameras() {
@@ -224,6 +326,17 @@ case "run":
         i += 1
     }
     run(cameraName: cameraName, mode: mode, expose: exposeOnConnect)
+case "check":
+    var cameraName = "OBS Virtual Camera"
+    var seconds = 15.0
+    var i = 0
+    while i < args.count {
+        if args[i] == "--camera", i + 1 < args.count { cameraName = args[i + 1]; i += 1 }
+        else if let s = Double(args[i]) { seconds = s }
+        else { fail("unknown option \(args[i])\n\n\(usage)") }
+        i += 1
+    }
+    check(cameraName: cameraName, seconds: seconds)
 case "cameras": listCameras()
 case "info": info()
 case "expose": expose()

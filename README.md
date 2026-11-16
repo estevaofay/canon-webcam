@@ -46,7 +46,11 @@ macOS only lets signed Camera Extensions provide virtual cameras. OBS Studio shi
    canon-webcam
    ```
 
+   The first time, macOS asks whether your terminal app (Terminal, iTerm, …) may use the camera. Click **Allow**: feeding a virtual camera counts as camera access, and without it macOS silently drops every frame.
+
 4. In Zoom, Meet or FaceTime, choose **OBS Virtual Camera**.
+
+To confirm the whole path works without opening a video app, run `canon-webcam check`. It feeds the virtual camera and reads it back the way Zoom would, then reports how many of the DSLR's own frames came out.
 
 ### Option B: this repo's own "Canon Webcam" camera (needs an Apple Developer account)
 
@@ -69,6 +73,9 @@ canon-webcam [run] [--camera NAME] [--fit] [--expose]
     --camera NAME  virtual camera to feed (default "OBS Virtual Camera")
     --fit          show the whole 3:2 frame with side bars (default: crop to 16:9)
     --expose       set 1/60s + ISO Auto on every connect (mode dial on M)
+canon-webcam check [--camera NAME] [SECONDS]
+    Feed the virtual camera and read it back like a video app, to confirm the
+    DSLR's frames come out the other side.
 canon-webcam cameras          list virtual cameras that accept frames
 canon-webcam info             camera model, live-view support, exposure, battery
 canon-webcam expose           set webcam-friendly exposure: 1/60s, ISO Auto
@@ -92,6 +99,8 @@ If the camera is unplugged, switched off or times out, canon-webcam keeps runnin
 | --- | --- |
 | `Could not claim the USB device` | Another app has the camera (Photos, Image Capture, EOS Utility, gphoto2). Quit it and retry. |
 | `virtual camera "OBS Virtual Camera" not found` | The OBS camera extension isn't allowed yet: see Option A, step 2. `canon-webcam cameras` lists what is available. |
+| `camera access is not allowed for the app running canon-webcam` | Allow your terminal app in **System Settings → Privacy & Security → Camera**. |
+| Apps only show the OBS placeholder; `check` reports 0 DSLR frames | The camera extension can get stuck if something fed it without camera permission. Restart it: switch **OBS Virtual Camera** off and on in System Settings → General → Login Items & Extensions → Camera Extensions (or run `sudo killall com.obsproject.obs-studio.mac-camera-extension`; macOS relaunches it). |
 | The image is black or very dark | Shutter speed is too fast for live view; run `canon-webcam expose`. |
 | `waiting: no camera found` | Check the USB cable and that the camera is on. Some bodies need the mode dial off the full-auto green square. |
 | Video freezes for a moment | The camera is busy (metering or autofocus); it recovers by itself. |

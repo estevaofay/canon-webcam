@@ -2,6 +2,7 @@ import CoreMedia
 import CoreMediaIO
 import CoreVideo
 import Foundation
+import IOSurface
 
 /// A CoreMediaIO camera (usually a Camera Extension) as seen by any app.
 public struct CMIOCamera {
@@ -109,6 +110,13 @@ public final class VirtualCameraSink {
     public let camera: CMIOCamera
     public private(set) var sent = 0
     public private(set) var dropped = 0
+    /// IOSurface IDs of buffers sent, so `check` can recognise its own frames
+    /// when they come back out of the virtual camera.
+    public private(set) var sentSurfaceIDs = Set<IOSurfaceID>()
+    /// Frames waiting in the queue / queue capacity, for diagnostics.
+    public var queueDepth: (count: Int32, capacity: Int32) {
+        (CMSimpleQueueGetCount(queue), CMSimpleQueueGetCapacity(queue))
+    }
 
     private let stream: CMIOStreamID
     private let queue: CMSimpleQueue
@@ -169,9 +177,63 @@ public final class VirtualCameraSink {
         // The queue takes ownership of one retain; the extension releases it.
         if CMSimpleQueueEnqueue(queue, element: Unmanaged.passRetained(sample).toOpaque()) == noErr {
             sent += 1
+            if let surface = CVPixelBufferGetIOSurface(pixelBuffer)?.takeUnretainedValue() {
+                sentSurfaceIDs.insert(IOSurfaceGetID(surface))
+            }
         } else {
             Unmanaged.passUnretained(sample).release()
             dropped += 1
         }
+    }
+}
+
+/// Reads what a virtual camera outputs, the same way a video app would.
+/// Used by `canon-webcam check` to confirm frames make it all the way through.
+public final class VirtualCameraReader {
+    public let camera: CMIOCamera
+    private let stream: CMIOStreamID
+    private let queue: CMSimpleQueue
+    private var started = false
+
+    public init(cameraNamed name: String) throws {
+        camera = try VirtualCameras.named(name)
+        let streams = CMIOProperty.ids(camera.id, kCMIODevicePropertyStreams)
+        guard let source = streams.first(where: { CMIOProperty.uint32($0, kCMIOStreamPropertyDirection) == 1 })
+        else { throw VirtualCameraError.noSink(name: name) }
+        stream = source
+
+        var unmanagedQueue: Unmanaged<CMSimpleQueue>?
+        let status = CMIOStreamCopyBufferQueue(stream, { _, _, _ in }, nil, &unmanagedQueue)
+        guard status == noErr, let unmanagedQueue else {
+            throw VirtualCameraError.cmio("open the output of \"\(name)\"", status)
+        }
+        queue = unmanagedQueue.takeRetainedValue()
+        let start = CMIODeviceStartStream(camera.id, stream)
+        guard start == noErr else { throw VirtualCameraError.cmio("start reading \"\(name)\"", start) }
+        started = true
+    }
+
+    deinit { stop() }
+
+    public func stop() {
+        guard started else { return }
+        CMIODeviceStopStream(camera.id, stream)
+        started = false
+    }
+
+    /// Takes every frame received since the last call; returns each frame's
+    /// IOSurface ID (0 if it has none).
+    public func drain() -> [IOSurfaceID] {
+        var result: [IOSurfaceID] = []
+        while let element = CMSimpleQueueDequeue(queue) {
+            let sample = Unmanaged<CMSampleBuffer>.fromOpaque(element).takeRetainedValue()
+            if let image = CMSampleBufferGetImageBuffer(sample),
+               let surface = CVPixelBufferGetIOSurface(image)?.takeUnretainedValue() {
+                result.append(IOSurfaceGetID(surface))
+            } else {
+                result.append(0)
+            }
+        }
+        return result
     }
 }
