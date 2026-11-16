@@ -119,15 +119,54 @@ func setWebcamExposure(_ camera: EOSCamera) throws {
 
 // MARK: - Commands
 
+/// The current connection to the virtual camera. Camera extensions can restart
+/// (another app quits, macOS relaunches them), which silently strands an open
+/// sink; `run` swaps in a fresh one when that happens.
+final class SinkConnection {
+    let cameraName: String
+    private let lock = NSLock()
+    private var sink: VirtualCameraSink?
+    private(set) var sentBefore = 0
+    private(set) var droppedBefore = 0
+
+    init(cameraName: String) { self.cameraName = cameraName }
+
+    var isOpen: Bool { lock.withLock { sink != nil } }
+    /// Totals across reconnections.
+    var sent: Int { lock.withLock { sentBefore + (sink?.sent ?? 0) } }
+    var dropped: Int { lock.withLock { droppedBefore + (sink?.dropped ?? 0) } }
+
+    func send(_ frame: CVPixelBuffer) { lock.withLock { sink?.send(frame) } }
+
+    @discardableResult
+    func open() throws -> VirtualCameraSink {
+        let new = try VirtualCameraSink(cameraNamed: cameraName)
+        lock.withLock { sink = new }
+        return new
+    }
+
+    func close() {
+        lock.withLock {
+            guard let old = sink else { return }
+            sentBefore += old.sent
+            droppedBefore += old.dropped
+            old.stop()
+            sink = nil
+        }
+    }
+}
+
 func run(cameraName: String, mode: FrameRenderer.Mode, expose: Bool) -> Never {
     ensureCameraAccess()
-    let sink: VirtualCameraSink
-    do { sink = try VirtualCameraSink(cameraNamed: cameraName) } catch { fail("\(error)") }
-    log("feeding \"\(sink.camera.name)\" (\(mode.rawValue) mode). Ctrl-C to stop.")
+    let connection = SinkConnection(cameraName: cameraName)
+    do { try connection.open() } catch { fail("\(error)") }
+    log("feeding \"\(cameraName)\" (\(mode.rawValue) mode). Ctrl-C to stop.")
 
     let renderer = FrameRenderer(mode: mode)
     let stats = FrameStats()
     let live = LiveView()
+    let counterLock = NSLock()
+    var cameraFrames = 0
     if expose { live.onConnect = setWebcamExposure }
     live.onEvent = { event in
         switch event {
@@ -135,16 +174,42 @@ func run(cameraName: String, mode: FrameRenderer.Mode, expose: Bool) -> Never {
         case let .waiting(reason): log("waiting: \(reason)")
         }
     }
-    var renderFailures = 0
     live.onFrame = { jpeg in
+        counterLock.withLock { cameraFrames += 1 }
         if let frame = renderer.render(jpeg: jpeg) {
-            sink.send(frame)
+            connection.send(frame)
             stats.frame()
-        } else {
-            renderFailures += 1
         }
     }
     live.start()
+
+    // Watchdog: if the camera keeps delivering but the virtual camera stopped
+    // taking frames for ~2s, its extension restarted or something else took
+    // over its input. Reconnect by name.
+    var watchFrames = 0
+    var watchSent = 0
+    let watchdog = DispatchSource.makeTimerSource(queue: .main)
+    watchdog.schedule(deadline: .now() + 2, repeating: 2)
+    watchdog.setEventHandler {
+        let frames = counterLock.withLock { cameraFrames }
+        let sent = connection.sent
+        defer { watchFrames = frames; watchSent = sent }
+        if !connection.isOpen {
+            if (try? connection.open()) != nil { log("reconnected to \"\(cameraName)\"") }
+            return
+        }
+        if frames - watchFrames >= 5 && sent == watchSent {
+            log("\"\(cameraName)\" stopped taking frames (its extension restarted, or another app "
+                + "such as OBS started feeding it); reconnecting")
+            connection.close()
+            if (try? connection.open()) != nil {
+                log("reconnected to \"\(cameraName)\"")
+            } else {
+                log("waiting for \"\(cameraName)\" to come back")
+            }
+        }
+    }
+    watchdog.resume()
 
     var lastSent = 0
     var lastDropped = 0
@@ -152,22 +217,19 @@ func run(cameraName: String, mode: FrameRenderer.Mode, expose: Bool) -> Never {
     timer.schedule(deadline: .now() + 10, repeating: 10)
     timer.setEventHandler {
         let s = stats.take()
-        if ProcessInfo.processInfo.environment["CANON_WEBCAM_DEBUG"] != nil {
-            let depth = sink.queueDepth
-            log("debug: queue \(depth.count)/\(depth.capacity), render failures \(renderFailures)")
-        }
+        let sent = connection.sent - lastSent, dropped = connection.dropped - lastDropped
+        lastSent = connection.sent; lastDropped = connection.dropped
         guard s.frames > 0 else { return }
-        let sent = sink.sent - lastSent, dropped = sink.dropped - lastDropped
-        lastSent = sink.sent; lastDropped = sink.dropped
-        log(String(format: "%.1f fps (median gap %.0f ms, max %.0f ms), sent %d, dropped %d",
+        log(String(format: "%.1f fps from camera (median gap %.0f ms, max %.0f ms), sent %d, dropped %d",
                    s.fps, s.medianMs, s.maxMs, sent, dropped))
     }
     timer.resume()
 
     runUntilInterrupted {
         timer.cancel()
+        watchdog.cancel()
         live.stop()
-        sink.stop()
+        connection.close()
     }
 }
 

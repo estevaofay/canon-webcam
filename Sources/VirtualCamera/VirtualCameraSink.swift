@@ -145,12 +145,22 @@ public final class VirtualCameraSink {
         guard started else { return }
         CMIODeviceStopStream(camera.id, stream)
         started = false
+        // Release frames the extension never took (e.g. it restarted), so
+        // their pixel buffers go back to the renderer's pool.
+        while let element = CMSimpleQueueDequeue(queue) {
+            Unmanaged<CMSampleBuffer>.fromOpaque(element).release()
+        }
     }
 
+    /// Frames allowed to wait in the queue before new ones are dropped. Kept
+    /// small for low latency, and below the renderer's pool size so a stuck
+    /// extension shows up as dropped frames instead of starving the renderer.
+    public static let maxQueuedFrames: Int32 = 2
+
     public func send(_ pixelBuffer: CVPixelBuffer) {
-        // If the extension hasn't consumed the previous frame, drop this one
+        // If the extension hasn't consumed the previous frames, drop this one
         // rather than adding latency.
-        if CMSimpleQueueGetCount(queue) >= CMSimpleQueueGetCapacity(queue) {
+        if CMSimpleQueueGetCount(queue) >= min(Self.maxQueuedFrames, CMSimpleQueueGetCapacity(queue)) {
             dropped += 1
             return
         }
