@@ -221,19 +221,21 @@ public final class VirtualCameraReader {
         started = false
     }
 
+    /// Takes every frame received since the last call.
+    public func drainFrames() -> [CVPixelBuffer] {
+        var result: [CVPixelBuffer] = []
+        while let element = CMSimpleQueueDequeue(queue) {
+            let sample = Unmanaged<CMSampleBuffer>.fromOpaque(element).takeRetainedValue()
+            if let image = CMSampleBufferGetImageBuffer(sample) { result.append(image) }
+        }
+        return result
+    }
+
     /// Takes every frame received since the last call; returns each frame's
     /// IOSurface ID (0 if it has none).
     public func drain() -> [IOSurfaceID] {
-        var result: [IOSurfaceID] = []
-        while let element = CMSimpleQueueDequeue(queue) {
-            let sample = Unmanaged<CMSampleBuffer>.fromOpaque(element).takeRetainedValue()
-            if let image = CMSampleBufferGetImageBuffer(sample),
-               let surface = CVPixelBufferGetIOSurface(image)?.takeUnretainedValue() {
-                result.append(IOSurfaceGetID(surface))
-            } else {
-                result.append(0)
-            }
+        drainFrames().map { frame in
+            CVPixelBufferGetIOSurface(frame).map { IOSurfaceGetID($0.takeUnretainedValue()) } ?? 0
         }
-        return result
     }
 }

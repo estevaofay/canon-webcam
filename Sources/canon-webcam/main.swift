@@ -1,5 +1,6 @@
 import AVFoundation
 import CanonCapture
+import CoreImage
 import Foundation
 import VirtualCamera
 
@@ -16,6 +17,9 @@ USAGE
   canon-webcam check [--camera NAME] [SECONDS]
       Feed the virtual camera and read it back like a video app would, to
       confirm the DSLR's frames come out the other side (default: 15s).
+  canon-webcam peek [--camera NAME] [-o FILE] [SECONDS]
+      Watch a virtual camera like a video app (read-only, safe to run next to
+      a running feed) and save the last frame it shows (default: peek.jpg).
   canon-webcam cameras          list virtual cameras that accept frames
   canon-webcam info             show the connected DSLR and its exposure settings
   canon-webcam expose           set webcam-friendly exposure: 1/60s, ISO Auto
@@ -230,6 +234,49 @@ func check(cameraName: String, seconds: Double) -> Never {
     runUntilInterrupted { live.stop(); reader.stop(); sink.stop() }
 }
 
+/// Watches a virtual camera like a video app would (read-only: it does not
+/// feed it, so it is safe to run next to `canon-webcam run`) and saves the
+/// last frame it saw.
+func peek(cameraName: String, seconds: Double, output: String) -> Never {
+    ensureCameraAccess()
+    let reader: VirtualCameraReader
+    do { reader = try VirtualCameraReader(cameraNamed: cameraName) } catch { fail("\(error)") }
+    log("watching \"\(cameraName)\" for \(Int(seconds))s…")
+
+    var frames = 0
+    var surfaces = Set<IOSurfaceID>()
+    var last: CVPixelBuffer?
+    let start = Date()
+    let poll = DispatchSource.makeTimerSource(queue: .main)
+    poll.schedule(deadline: .now(), repeating: 0.01)
+    poll.setEventHandler {
+        for frame in reader.drainFrames() {
+            frames += 1
+            last = frame
+            if let surface = CVPixelBufferGetIOSurface(frame)?.takeUnretainedValue() {
+                surfaces.insert(IOSurfaceGetID(surface))
+            }
+        }
+        guard Date().timeIntervalSince(start) >= seconds else { return }
+        poll.cancel()
+        reader.stop()
+        print(String(format: "frames out of \"%@\": %d (%.1f fps), %d distinct buffers",
+                     cameraName, frames, Double(frames) / seconds, surfaces.count))
+        guard let last else { print("no frames at all: is the camera extension running?"); exit(1) }
+        let image = CIImage(cvPixelBuffer: last)
+        let context = CIContext()
+        do {
+            try context.writeJPEGRepresentation(
+                of: image, to: URL(fileURLWithPath: output),
+                colorSpace: CGColorSpace(name: CGColorSpace.sRGB)!, options: [:])
+            print("saved what video apps see to \(output) (\(CVPixelBufferGetWidth(last))x\(CVPixelBufferGetHeight(last)))")
+        } catch { fail("could not save \(output): \(error)") }
+        exit(0)
+    }
+    poll.resume()
+    runUntilInterrupted { reader.stop() }
+}
+
 func listCameras() {
     let cameras = VirtualCameras.all()
     if cameras.isEmpty { print("No cameras visible to CoreMediaIO."); return }
@@ -337,6 +384,19 @@ case "check":
         i += 1
     }
     check(cameraName: cameraName, seconds: seconds)
+case "peek":
+    var cameraName = "OBS Virtual Camera"
+    var seconds = 5.0
+    var output = "peek.jpg"
+    var i = 0
+    while i < args.count {
+        if args[i] == "--camera", i + 1 < args.count { cameraName = args[i + 1]; i += 1 }
+        else if args[i] == "-o", i + 1 < args.count { output = args[i + 1]; i += 1 }
+        else if let s = Double(args[i]) { seconds = s }
+        else { fail("unknown option \(args[i])\n\n\(usage)") }
+        i += 1
+    }
+    peek(cameraName: cameraName, seconds: seconds, output: output)
 case "cameras": listCameras()
 case "info": info()
 case "expose": expose()
