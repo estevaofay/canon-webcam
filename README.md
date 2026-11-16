@@ -16,7 +16,7 @@ canon-webcam should work with any camera that libgphoto2 can stream live view fr
 
 | Camera | Status |
 | --- | --- |
-| EOS Rebel T5 / 1200D / Kiss X70 | Tested: 14 fps at 1056×704 |
+| EOS Rebel T5 / 1200D / Kiss X70 | Tested end to end through OBS Virtual Camera: 1056×704, 10–18 fps |
 | EOS Rebel T3i / 600D / Kiss X5 | Expected to work (same protocol); not yet tested |
 
 Run `canon-webcam info` to check your camera. If it reports `Live view: supported`, it should work. Reports for other models are welcome.
@@ -88,6 +88,7 @@ If the camera is unplugged, switched off or times out, canon-webcam keeps runnin
 ## Camera tips
 
 - **Exposure.** With the mode dial on **M**, live view shows the exposure you set: at 1/4000s it is almost black. Run `canon-webcam expose` once (1/60s, ISO Auto), or use `--expose`. **P** mode also works.
+- **Frame rate** depends on the camera, not on canon-webcam. On the T5, live view runs at about 14–18 fps in M mode at 1/60s, but drops to about 10 fps in auto modes in dim light. More light helps.
 - **Focus** once, manually or with a half-press, before you start. These bodies have no continuous autofocus in live view.
 - **Power.** Live view drains the battery in well under an hour. Use an AC dummy battery: Canon ACK-E8 for the T3i (LP-E8), ACK-E10 for the T5 (LP-E10), or a third-party equivalent.
 - **Turn off auto power-off** (camera menu → Auto power off → Disable).
