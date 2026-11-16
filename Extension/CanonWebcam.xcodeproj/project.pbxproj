@@ -1,0 +1,425 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		154D25AA36EFCB8175D94024 /* CanonWebcamApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7FC0E2F86AFC1D90FF81DA3 /* CanonWebcamApp.swift */; };
+		78E461F66549325B52E76A95 /* CanonWebcamProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0C5B24C2B71D781E96E633 /* CanonWebcamProvider.swift */; };
+		CAC5AC9596AF3253D892B29D /* CameraExtension.systemextension in Embed System Extensions */ = {isa = PBXBuildFile; fileRef = 60B7CB250D30456415E2B53A /* CameraExtension.systemextension */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		D4B4051CD8F67C8B6C791E97 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6813B6CF49B66D513BEFE15E /* main.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		FEEC86B441B05EBFE602846D /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = C0EB263E1497B2352D802315 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 5DB892FC904DD0B7E6B66007;
+			remoteInfo = CameraExtension;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		4BAC77404A231E44D1123434 /* Embed System Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(SYSTEM_EXTENSIONS_FOLDER_PATH)";
+			dstSubfolderSpec = 16;
+			files = (
+				CAC5AC9596AF3253D892B29D /* CameraExtension.systemextension in Embed System Extensions */,
+			);
+			name = "Embed System Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		0815A0625BFF298BF6A3469E /* CameraExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = CameraExtension.entitlements; sourceTree = "<group>"; };
+		5CFD02F9D80CDF7911342262 /* CanonWebcam.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CanonWebcam.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		60B7CB250D30456415E2B53A /* CameraExtension.systemextension */ = {isa = PBXFileReference; explicitFileType = "wrapper.system-extension"; includeInIndex = 0; path = CameraExtension.systemextension; sourceTree = BUILT_PRODUCTS_DIR; };
+		6813B6CF49B66D513BEFE15E /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		A21AACED35CFAD4F534AA51B /* CanonWebcam.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = CanonWebcam.entitlements; sourceTree = "<group>"; };
+		B7FC0E2F86AFC1D90FF81DA3 /* CanonWebcamApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanonWebcamApp.swift; sourceTree = "<group>"; };
+		B8A2AD00B0A077D4FC653FFC /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		C6E1C4B1AF90ACCC28C35D0C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		FA0C5B24C2B71D781E96E633 /* CanonWebcamProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanonWebcamProvider.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		05C4C88896077A6D8E6DAE43 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				60B7CB250D30456415E2B53A /* CameraExtension.systemextension */,
+				5CFD02F9D80CDF7911342262 /* CanonWebcam.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		1091A2D2EB046614AE80E6E6 /* CameraExtension */ = {
+			isa = PBXGroup;
+			children = (
+				0815A0625BFF298BF6A3469E /* CameraExtension.entitlements */,
+				FA0C5B24C2B71D781E96E633 /* CanonWebcamProvider.swift */,
+				C6E1C4B1AF90ACCC28C35D0C /* Info.plist */,
+				6813B6CF49B66D513BEFE15E /* main.swift */,
+			);
+			path = CameraExtension;
+			sourceTree = "<group>";
+		};
+		1305CB9BA1E5410F746F7685 = {
+			isa = PBXGroup;
+			children = (
+				6B175B29559AD4498D8691C1 /* App */,
+				1091A2D2EB046614AE80E6E6 /* CameraExtension */,
+				05C4C88896077A6D8E6DAE43 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		6B175B29559AD4498D8691C1 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				A21AACED35CFAD4F534AA51B /* CanonWebcam.entitlements */,
+				B7FC0E2F86AFC1D90FF81DA3 /* CanonWebcamApp.swift */,
+				B8A2AD00B0A077D4FC653FFC /* Info.plist */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		5DB892FC904DD0B7E6B66007 /* CameraExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C6153DA9A5EDBF8524A3A3F0 /* Build configuration list for PBXNativeTarget "CameraExtension" */;
+			buildPhases = (
+				5C07237AEBB28CAA8364C69A /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = CameraExtension;
+			packageProductDependencies = (
+			);
+			productName = CameraExtension;
+			productReference = 60B7CB250D30456415E2B53A /* CameraExtension.systemextension */;
+			productType = "com.apple.product-type.system-extension";
+		};
+		B4EC58CD4541D1DFD9A255A2 /* CanonWebcam */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 4E2E8AE94DF8523AC756E745 /* Build configuration list for PBXNativeTarget "CanonWebcam" */;
+			buildPhases = (
+				058CAC433E18F7F85C308A75 /* Sources */,
+				4BAC77404A231E44D1123434 /* Embed System Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				52E19D7EE2C873EDFA79B089 /* PBXTargetDependency */,
+			);
+			name = CanonWebcam;
+			packageProductDependencies = (
+			);
+			productName = CanonWebcam;
+			productReference = 5CFD02F9D80CDF7911342262 /* CanonWebcam.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		C0EB263E1497B2352D802315 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					5DB892FC904DD0B7E6B66007 = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Automatic;
+					};
+					B4EC58CD4541D1DFD9A255A2 = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 42C2E22CED4E93917118B0F7 /* Build configuration list for PBXProject "CanonWebcam" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 1305CB9BA1E5410F746F7685;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 05C4C88896077A6D8E6DAE43 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				B4EC58CD4541D1DFD9A255A2 /* CanonWebcam */,
+				5DB892FC904DD0B7E6B66007 /* CameraExtension */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		058CAC433E18F7F85C308A75 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				154D25AA36EFCB8175D94024 /* CanonWebcamApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5C07237AEBB28CAA8364C69A /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				78E461F66549325B52E76A95 /* CanonWebcamProvider.swift in Sources */,
+				D4B4051CD8F67C8B6C791E97 /* main.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		52E19D7EE2C873EDFA79B089 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 5DB892FC904DD0B7E6B66007 /* CameraExtension */;
+			targetProxy = FEEC86B441B05EBFE602846D /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		121511FF92BA127D325BA4BC /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = CameraExtension/CameraExtension.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_FILE = CameraExtension/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.estevaofay.CanonWebcam.CameraExtension;
+				PRODUCT_NAME = io.github.estevaofay.CanonWebcam.CameraExtension;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		1DECAACBCA48BBEBA5F9D72B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MARKETING_VERSION = 0.1.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		20C13D787CD4F6B18883DD72 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = "";
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MARKETING_VERSION = 0.1.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		44C0FD5E9041FA42CE40FD98 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = CameraExtension/CameraExtension.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_FILE = CameraExtension/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.estevaofay.CanonWebcam.CameraExtension;
+				PRODUCT_NAME = io.github.estevaofay.CanonWebcam.CameraExtension;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		57B013DF59A0388FCAD79023 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = App/CanonWebcam.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_FILE = App/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.estevaofay.CanonWebcam;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		63B9F3F1A90C10CED675A122 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = App/CanonWebcam.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_FILE = App/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.estevaofay.CanonWebcam;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		42C2E22CED4E93917118B0F7 /* Build configuration list for PBXProject "CanonWebcam" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1DECAACBCA48BBEBA5F9D72B /* Debug */,
+				20C13D787CD4F6B18883DD72 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		4E2E8AE94DF8523AC756E745 /* Build configuration list for PBXNativeTarget "CanonWebcam" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				57B013DF59A0388FCAD79023 /* Debug */,
+				63B9F3F1A90C10CED675A122 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		C6153DA9A5EDBF8524A3A3F0 /* Build configuration list for PBXNativeTarget "CameraExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				121511FF92BA127D325BA4BC /* Debug */,
+				44C0FD5E9041FA42CE40FD98 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = C0EB263E1497B2352D802315 /* Project object */;
+}

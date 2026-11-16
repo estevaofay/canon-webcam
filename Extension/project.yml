@@ -1,0 +1,64 @@
+# XcodeGen spec for the "Canon Webcam" Camera Extension and its host app.
+# Regenerate the Xcode project with:  cd Extension && xcodegen generate
+#
+# Camera extensions are system extensions: macOS only installs them when the
+# host app is in /Applications and signed by an Apple Developer team (paid
+# membership) with the System Extension capability. Set DEVELOPMENT_TEAM below
+# (or in Xcode) and change the bundle id prefix to one you own.
+name: CanonWebcam
+options:
+  bundleIdPrefix: io.github.estevaofay
+  deploymentTarget:
+    macOS: "13.0"
+settings:
+  base:
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "5.0"
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Automatic
+    ENABLE_HARDENED_RUNTIME: YES
+targets:
+  CanonWebcam:
+    type: application
+    platform: macOS
+    sources: [App]
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: Canon Webcam
+        CFBundlePackageType: APPL
+        LSApplicationCategoryType: public.app-category.video
+        NSHumanReadableCopyright: MIT License
+    entitlements:
+      path: App/CanonWebcam.entitlements
+      properties:
+        com.apple.developer.system-extension.install: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.estevaofay.CanonWebcam
+    dependencies:
+      - target: CameraExtension
+  CameraExtension:
+    type: system-extension
+    platform: macOS
+    sources: [CameraExtension]
+    info:
+      path: CameraExtension/Info.plist
+      properties:
+        CFBundleDisplayName: Canon Webcam
+        CFBundlePackageType: SYSX
+        NSSystemExtensionUsageDescription: Adds the "Canon Webcam" virtual camera, fed by a Canon EOS DSLR.
+        CMIOExtension:
+          CMIOExtensionMachServiceName: $(TeamIdentifierPrefix)$(PRODUCT_BUNDLE_IDENTIFIER)
+    entitlements:
+      path: CameraExtension/CameraExtension.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.application-groups:
+          - $(TeamIdentifierPrefix)io.github.estevaofay.CanonWebcam
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.estevaofay.CanonWebcam.CameraExtension
+        # A system extension bundle must be named after its bundle id.
+        PRODUCT_NAME: io.github.estevaofay.CanonWebcam.CameraExtension
