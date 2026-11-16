@@ -2,21 +2,21 @@
 
 Use an old Canon EOS DSLR as a webcam on a modern Mac. It needs no Canon software and no paid Apple account.
 
-Canon's EOS Webcam Utility has dropped (or never had) support for many older bodies, such as the Rebel T3i (600D) and the Rebel T5 (1200D). These cameras still have excellent sensors and lenses, and they all speak the same USB live-view protocol. canon-webcam talks to the camera directly through the open-source [libgphoto2](https://github.com/gphoto/libgphoto2) library and feeds its live view into a macOS virtual camera. Zoom, Google Meet, FaceTime, Teams, Slack and other apps can then use it like any other camera.
+Canon's EOS Webcam Utility has dropped (or never had) support for many older bodies, such as the Rebel T3i (600D) and the Rebel T5 (1200D). These cameras still have excellent sensors and lenses, and they all speak the same USB live-view protocol. canon-webcam talks to the camera directly over USB, using the open-source [libgphoto2](https://github.com/gphoto/libgphoto2) library and its own fast path for Canon live view, and feeds the live view into a macOS virtual camera. Zoom, Google Meet, FaceTime, Teams, Slack and other apps can then use it like any other camera.
 
 ```
  Canon DSLR ──USB──▶ canon-webcam ──frames──▶ virtual camera ──▶ Zoom / Meet / FaceTime
-            (libgphoto2 live view,          (OBS Virtual Camera, or this
-             ~15 fps JPEG, 1056×704)         repo's own "Canon Webcam")
+            (live view: ~21 fps JPEG,       (OBS Virtual Camera, or this
+             1056×704; sent at 24 fps)       repo's own "Canon Webcam")
 ```
 
 ## Supported cameras
 
-canon-webcam should work with any camera that libgphoto2 can stream live view from, which includes most Canon EOS bodies from about 2008 onward.
+canon-webcam should work with any camera that libgphoto2 can stream live view from, which includes most Canon EOS bodies from about 2008 onward. Canon EOS bodies use canon-webcam's faster direct USB path; other cameras use libgphoto2.
 
 | Camera | Status |
 | --- | --- |
-| EOS Rebel T5 / 1200D / Kiss X70 | Tested end to end through OBS Virtual Camera: 1056×704, 10–18 fps |
+| EOS Rebel T5 / 1200D / Kiss X70 | Tested end to end through OBS Virtual Camera: 1056×704, about 21 fps from the camera, sent to apps at a steady 24 fps |
 | EOS Rebel T3i / 600D / Kiss X5 | Expected to work (same protocol); not yet tested |
 
 Run `canon-webcam info` to check your camera. If it reports `Live view: supported`, it should work. Reports for other models are welcome.
@@ -68,11 +68,15 @@ If you have a membership:
 ## Usage
 
 ```
-canon-webcam [run] [--camera NAME] [--fit] [--expose]
+canon-webcam [run] [--camera NAME] [--fit] [--expose] [--fps N] [--gphoto2]
     Stream live view into a virtual camera until Ctrl-C.
     --camera NAME  virtual camera to feed (default "OBS Virtual Camera")
     --fit          show the whole 3:2 frame with side bars (default: crop to 16:9)
     --expose       set 1/60s + ISO Auto on every connect (mode dial on M)
+    --fps N        send apps a steady N fps, repeating the newest camera frame
+                   when the next isn't ready (default 24; 0 = as they arrive)
+    --gphoto2      read live view through libgphoto2 instead of the faster
+                   direct USB path (for troubleshooting)
 canon-webcam check [--camera NAME] [SECONDS]
     Feed the virtual camera and read it back like a video app, to confirm the
     DSLR's frames come out the other side.
@@ -83,7 +87,8 @@ canon-webcam cameras          list virtual cameras that accept frames
 canon-webcam info             camera model, live-view support, exposure, battery
 canon-webcam expose           set webcam-friendly exposure: 1/60s, ISO Auto
 canon-webcam snap [FILE]      save one live-view frame as JPEG
-canon-webcam bench [SECONDS]  measure the live-view frame rate
+canon-webcam bench [--gphoto2] [SECONDS]
+                              measure the live-view frame rate
 ```
 
 If the camera is unplugged, switched off or times out, canon-webcam keeps running and reconnects when the camera comes back.
@@ -91,7 +96,7 @@ If the camera is unplugged, switched off or times out, canon-webcam keeps runnin
 ## Camera tips
 
 - **Exposure.** With the mode dial on **M**, live view shows the exposure you set: at 1/4000s it is almost black. Run `canon-webcam expose` once (1/60s, ISO Auto), or use `--expose`. **P** mode also works.
-- **Frame rate** depends on the camera, not on canon-webcam. On the T5, live view runs at about 14–18 fps in M mode at 1/60s, but drops to about 10 fps in auto modes in dim light. More light helps.
+- **Frame rate.** A Rebel T5 delivers about 21 live-view frames per second over USB; canon-webcam sends apps a steady 24 fps by repeating the newest frame when the next one isn't ready (`--fps` changes this). Shutter speed, autofocus method and live-view size made no difference in our tests. In auto modes in dim light the camera can slow down, so use **M** and enough light. A true 24–30 new frames per second needs the camera's HDMI output and a capture device.
 - **Focus** once, manually or with a half-press, before you start. These bodies have no continuous autofocus in live view.
 - **Power.** Live view drains the battery in well under an hour. Use an AC dummy battery: Canon ACK-E8 for the T3i (LP-E8), ACK-E10 for the T5 (LP-E10), or a third-party equivalent.
 - **Turn off auto power-off** (camera menu → Auto power off → Disable).
@@ -105,18 +110,18 @@ If the camera is unplugged, switched off or times out, canon-webcam keeps runnin
 | `virtual camera "OBS Virtual Camera" not found` | The OBS camera extension isn't allowed yet: see Option A, step 2. `canon-webcam cameras` lists what is available. |
 | `camera access is not allowed for the app running canon-webcam` | Allow your terminal app in **System Settings → Privacy & Security → Camera**. |
 | Apps only show the OBS placeholder; `check` reports 0 DSLR frames | The camera extension can get stuck if something fed it without camera permission. Restart it: switch **OBS Virtual Camera** off and on in System Settings → General → Login Items & Extensions → Camera Extensions (or run `sudo killall com.obsproject.obs-studio.mac-camera-extension`; macOS relaunches it). |
-| `peek` shows the DSLR, but Meet/Zoom shows something else | The app is holding an old connection: pick another camera and switch back, or reload the tab or app. If it shows an OBS scene, the OBS app's own **Start Virtual Camera** is on and competing for the camera: stop it in OBS. Browsers also need camera access in System Settings → Privacy & Security → Camera. |
+| `peek` shows the DSLR, but Meet/Zoom shows something else or doesn't list the camera | The app is holding an old connection, typically after the camera extension restarted: pick another camera and switch back, or quit the app or browser completely (Cmd-Q) and reopen it. Reloading the tab is not enough. Run only one `canon-webcam` at a time: two copies keep taking the DSLR from each other. If it shows an OBS scene, the OBS app's own **Start Virtual Camera** is on and competing for the camera: stop it in OBS. Browsers also need camera access in System Settings → Privacy & Security → Camera. |
 | The image is black or very dark | Shutter speed is too fast for live view; run `canon-webcam expose`. |
 | `waiting: no camera found` | Check the USB cable and that the camera is on. Some bodies need the mode dial off the full-auto green square. |
 | Video freezes for a moment | The camera is busy (metering or autofocus); it recovers by itself. |
 
 ## How it works
 
-- `Sources/CanonCapture` wraps libgphoto2: it connects (after stopping `ptpcamerad`), calls `gp_camera_capture_preview` in a loop to get live-view JPEGs, and reads and writes settings such as `shutterspeed` and `iso`.
+- `Sources/CanonCapture` talks to the camera. `DirectLiveView` speaks Canon's PTP live-view commands over USB through libusb, asking only for frames (libgphoto2 spends four extra USB round trips per frame, which caps a T5 at about 14 fps). `EOSCamera` wraps libgphoto2 for everything else (`info`, `expose`, `snap`) and for live view on cameras the direct path doesn't support. Both stop `ptpcamerad` before connecting.
 - `Sources/VirtualCamera` decodes each JPEG with Core Image into a 1920×1080 BGRA `CVPixelBuffer`, then finds the target camera through CoreMediaIO. It opens the camera's *sink* stream (`CMIOStreamCopyBufferQueue` + `CMIODeviceStartStream`) and enqueues each frame as a `CMSampleBuffer`. The Camera Extension forwards those frames to its *source* stream, which is what video apps read.
 - `Extension/` is a Camera Extension with exactly that sink → source design, written from scratch for this project.
 - `scripts/t5cam.sh` is the original shell prototype, using the `gphoto2` command-line tool and ffmpeg. It is kept as a dependency-light fallback.
 
 ## License
 
-MIT; see [LICENSE](LICENSE). libgphoto2 is LGPL-2.1 and is linked dynamically from your Homebrew install. Not affiliated with Canon or OBS Studio.
+MIT; see [LICENSE](LICENSE). libgphoto2 and libusb are LGPL-2.1 and are linked dynamically from your Homebrew install. Not affiliated with Canon or OBS Studio.

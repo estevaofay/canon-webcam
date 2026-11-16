@@ -15,8 +15,16 @@ let package = Package(
             pkgConfig: "libgphoto2",
             providers: [.brew(["libgphoto2"])]
         ),
+        // libusb (LGPL-2.1), installed with libgphoto2. Used for the fast live-view
+        // path, which speaks Canon's PTP commands directly.
+        .systemLibrary(
+            name: "CLibUSB",
+            path: "Sources/CLibUSB",
+            pkgConfig: "libusb-1.0",
+            providers: [.brew(["libusb"])]
+        ),
         // Talks to the camera: connect, live view frames, exposure settings.
-        .target(name: "CanonCapture", dependencies: ["CGPhoto2"]),
+        .target(name: "CanonCapture", dependencies: ["CGPhoto2", "CLibUSB"]),
         // Turns live-view JPEGs into 1920x1080 frames and pushes them into a
         // CoreMediaIO virtual camera's sink stream.
         .target(name: "VirtualCamera"),

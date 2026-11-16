@@ -8,12 +8,17 @@ let usage = """
 canon-webcam: use an old Canon EOS DSLR (Rebel T3i/600D, T5/1200D, ...) as a webcam on macOS.
 
 USAGE
-  canon-webcam [run] [--camera NAME] [--fit] [--expose]
+  canon-webcam [run] [--camera NAME] [--fit] [--expose] [--fps N] [--gphoto2]
       Stream the DSLR's live view into a virtual camera until Ctrl-C.
       --camera NAME  virtual camera to feed (default: "OBS Virtual Camera";
                      use "Canon Webcam" for this project's own extension)
       --fit          show the whole 3:2 frame with side bars (default: crop to 16:9)
       --expose       set 1/60s and ISO Auto on connect (mode dial on M)
+      --fps N        send video apps a steady N frames per second, repeating the
+                     newest camera frame when the next isn't ready (default: 24;
+                     0 sends each camera frame as soon as it arrives)
+      --gphoto2      read live view through libgphoto2 instead of the faster
+                     direct USB path (slower; for troubleshooting)
   canon-webcam check [--camera NAME] [SECONDS]
       Feed the virtual camera and read it back like a video app would, to
       confirm the DSLR's frames come out the other side (default: 15s).
@@ -24,7 +29,8 @@ USAGE
   canon-webcam info             show the connected DSLR and its exposure settings
   canon-webcam expose           set webcam-friendly exposure: 1/60s, ISO Auto
   canon-webcam snap [FILE]      save one live-view frame (default: snap.jpg)
-  canon-webcam bench [SECONDS]  measure live-view frame rate (default: 15s)
+  canon-webcam bench [--gphoto2] [SECONDS]
+                                measure live-view frame rate (default: 15s)
 
 """
 
@@ -156,32 +162,63 @@ final class SinkConnection {
     }
 }
 
-func run(cameraName: String, mode: FrameRenderer.Mode, expose: Bool) -> Never {
+/// The newest rendered camera frame, for the output clock to send.
+final class LatestFrame {
+    private let lock = NSLock()
+    private var frame: CVPixelBuffer?
+    private var arrived = Date.distantPast
+
+    func set(_ frame: CVPixelBuffer) { lock.withLock { self.frame = frame; arrived = Date() } }
+
+    /// The newest frame, unless it is older than `maxAge` (camera stalled or gone).
+    func get(maxAge: TimeInterval) -> CVPixelBuffer? {
+        lock.withLock { Date().timeIntervalSince(arrived) <= maxAge ? frame : nil }
+    }
+}
+
+func run(cameraName: String, mode: FrameRenderer.Mode, expose: Bool, fps: Double, direct: Bool) -> Never {
     ensureCameraAccess()
     let connection = SinkConnection(cameraName: cameraName)
     do { try connection.open() } catch { fail("\(error)") }
-    log("feeding \"\(cameraName)\" (\(mode.rawValue) mode). Ctrl-C to stop.")
+    let output = fps > 0 ? String(format: "steady %g fps", fps) : "camera frame rate"
+    log("feeding \"\(cameraName)\" (\(mode.rawValue) mode, \(output)). Ctrl-C to stop.")
 
     let renderer = FrameRenderer(mode: mode)
     let stats = FrameStats()
     let live = LiveView()
+    live.preferDirectUSB = direct
     let counterLock = NSLock()
     var cameraFrames = 0
+    let latest = LatestFrame()
     if expose { live.onConnect = setWebcamExposure }
     live.onEvent = { event in
         switch event {
-        case let .connected(model): log("camera connected: \(model), live view on")
+        case let .connected(model, direct):
+            log("camera connected: \(model), live view on (\(direct ? "direct USB" : "libgphoto2"))")
         case let .waiting(reason): log("waiting: \(reason)")
         }
     }
     live.onFrame = { jpeg in
         counterLock.withLock { cameraFrames += 1 }
         if let frame = renderer.render(jpeg: jpeg) {
-            connection.send(frame)
+            if fps > 0 { latest.set(frame) } else { connection.send(frame) }
             stats.frame()
         }
     }
     live.start()
+
+    // Output clock: video apps get frames at a steady rate. When the camera
+    // hasn't produced a new frame yet, the newest one is sent again; after a
+    // second without frames (camera stalled or unplugged) nothing is sent.
+    let clockQueue = DispatchQueue(label: "canon-webcam.output", qos: .userInteractive)
+    let clock = DispatchSource.makeTimerSource(flags: .strict, queue: clockQueue)
+    if fps > 0 {
+        clock.schedule(deadline: .now(), repeating: 1 / fps, leeway: .milliseconds(1))
+        clock.setEventHandler {
+            if let frame = latest.get(maxAge: 1) { connection.send(frame) }
+        }
+        clock.resume()
+    }
 
     // Watchdog: if the camera keeps delivering but the virtual camera stopped
     // taking frames for ~2s, its extension restarted or something else took
@@ -220,12 +257,13 @@ func run(cameraName: String, mode: FrameRenderer.Mode, expose: Bool) -> Never {
         let sent = connection.sent - lastSent, dropped = connection.dropped - lastDropped
         lastSent = connection.sent; lastDropped = connection.dropped
         guard s.frames > 0 else { return }
-        log(String(format: "%.1f fps from camera (median gap %.0f ms, max %.0f ms), sent %d, dropped %d",
-                   s.fps, s.medianMs, s.maxMs, sent, dropped))
+        log(String(format: "%.1f fps from camera (median gap %.0f ms, max %.0f ms), sent %.1f fps, dropped %d",
+                   s.fps, s.medianMs, s.maxMs, Double(sent) / 10, dropped))
     }
     timer.resume()
 
     runUntilInterrupted {
+        if fps > 0 { clock.cancel() }
         timer.cancel()
         watchdog.cancel()
         live.stop()
@@ -248,7 +286,7 @@ func check(cameraName: String, seconds: Double) -> Never {
     var cameraFrames = 0
     live.onEvent = { event in
         switch event {
-        case let .connected(model): log("camera connected: \(model)")
+        case let .connected(model, _): log("camera connected: \(model)")
         case let .waiting(reason): log("waiting: \(reason)")
         }
     }
@@ -379,15 +417,16 @@ func snap(_ path: String) {
     } catch { fail("\(error)") }
 }
 
-func bench(seconds: Double) -> Never {
+func bench(seconds: Double, direct: Bool) -> Never {
     let stats = FrameStats()
     let renderer = FrameRenderer()
     let live = LiveView()
+    live.preferDirectUSB = direct
     var connectedAt: Date?
     live.onEvent = { event in
         switch event {
-        case let .connected(model):
-            log("\(model): measuring for \(Int(seconds))s after the first frame…")
+        case let .connected(model, direct):
+            log("\(model) (\(direct ? "direct USB" : "libgphoto2")): measuring for \(Int(seconds))s after the first frame…")
         case let .waiting(reason): log("waiting: \(reason)")
         }
     }
@@ -421,6 +460,8 @@ case "run":
     var cameraName = "OBS Virtual Camera"
     var mode = FrameRenderer.Mode.fill
     var exposeOnConnect = false
+    var fps = 24.0
+    var direct = true
     var i = 0
     while i < args.count {
         switch args[i] {
@@ -429,12 +470,18 @@ case "run":
             cameraName = args[i + 1]; i += 1
         case "--fit": mode = .fit
         case "--expose": exposeOnConnect = true
+        case "--gphoto2": direct = false
+        case "--fps":
+            guard i + 1 < args.count, let value = Double(args[i + 1]), value >= 0, value <= 60 else {
+                fail("--fps needs a number from 0 to 60")
+            }
+            fps = value; i += 1
         case "-h", "--help": print(usage); exit(0)
         default: fail("unknown option \(args[i])\n\n\(usage)")
         }
         i += 1
     }
-    run(cameraName: cameraName, mode: mode, expose: exposeOnConnect)
+    run(cameraName: cameraName, mode: mode, expose: exposeOnConnect, fps: fps, direct: direct)
 case "check":
     var cameraName = "OBS Virtual Camera"
     var seconds = 15.0
@@ -463,7 +510,15 @@ case "cameras": listCameras()
 case "info": info()
 case "expose": expose()
 case "snap": snap(args.first ?? "snap.jpg")
-case "bench": bench(seconds: args.first.flatMap(Double.init) ?? 15)
+case "bench":
+    var seconds = 15.0
+    var direct = true
+    for arg in args {
+        if arg == "--gphoto2" { direct = false }
+        else if let s = Double(arg) { seconds = s }
+        else { fail("unknown option \(arg)\n\n\(usage)") }
+    }
+    bench(seconds: seconds, direct: direct)
 case "help", "-h", "--help": print(usage)
 default: fail("unknown command \(command)\n\n\(usage)")
 }

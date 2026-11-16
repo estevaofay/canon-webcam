@@ -25,6 +25,7 @@ SOFTWARE.
 Third-party software
 
 canon-webcam links dynamically against libgphoto2 and libgphoto2_port
-(https://github.com/gphoto/libgphoto2), which are licensed under the GNU Lesser
-General Public License v2.1 or later. They are not included in this repository;
-install them separately (for example with `brew install libgphoto2`).
+(https://github.com/gphoto/libgphoto2) and libusb (https://libusb.info), which
+are licensed under the GNU Lesser General Public License v2.1 or later. They are
+not included in this repository; install them separately (for example with
+`brew install libgphoto2`, which also installs libusb).
