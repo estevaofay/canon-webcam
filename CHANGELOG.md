@@ -13,4 +13,4 @@ The first release: use an old Canon EOS DSLR as a webcam on a Mac, from the menu
 - **Clear status.** The app says when no camera is connected, when another app holds it, when OBS Virtual Camera is missing, or when camera access is needed. It reconnects by itself when the camera comes back.
 - **Command-line tool** (`make install`) with `check`, `peek`, `bench`, `snap`, `info` and `expose` for testing and troubleshooting, and libgphoto2 support for other cameras.
 
-Tested with the EOS Rebel T3i (600D) and Rebel T5 (1200D). The app needs an Apple silicon Mac with macOS 27 or later, and isn't signed with an Apple Developer ID (first launch: System Settings → Privacy & Security → Open Anyway).
+Tested with the EOS Rebel T3i (600D) and Rebel T5 (1200D).

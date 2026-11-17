@@ -30,7 +30,7 @@ notes=$(awk -v v="$version" '
 [[ -n ${notes//[[:space:]]/} ]] || fail "CHANGELOG.md has no \"## $version\" section"
 
 echo "==> running the tests"
-swift test 2>&1 | tail -n 3
+swift test 2>&1 | grep -E "Executed [0-9]+ tests" | tail -n 1
 
 echo "==> building the DMG"
 scripts/make-app.sh --dmg
