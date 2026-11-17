@@ -3,6 +3,7 @@ import CanonCapture
 import CoreImage
 import Foundation
 import VirtualCamera
+import WebcamFeed
 
 let usage = """
 canon-webcam: use an old Canon EOS DSLR (Rebel T3i/600D, T5/1200D, ...) as a webcam on macOS.
@@ -75,33 +76,6 @@ func runUntilInterrupted(cleanup: @escaping () -> Void) -> Never {
     while true { CFRunLoopRun() }
 }
 
-final class FrameStats {
-    private let lock = NSLock()
-    private var frames = 0
-    private var gaps: [Double] = []
-    private var last: Date?
-
-    func frame() {
-        lock.withLock {
-            let now = Date()
-            if let last { gaps.append(now.timeIntervalSince(last)) }
-            last = now
-            frames += 1
-        }
-    }
-
-    /// Returns (fps, median gap ms, max gap ms) since the last call, and resets.
-    func take() -> (fps: Double, medianMs: Double, maxMs: Double, frames: Int) {
-        lock.withLock {
-            defer { gaps.removeAll(keepingCapacity: true); frames = 0 }
-            guard !gaps.isEmpty else { return (0, 0, 0, frames) }
-            let sorted = gaps.sorted()
-            let total = gaps.reduce(0, +)
-            return (Double(gaps.count) / total, sorted[sorted.count / 2] * 1000, sorted.last! * 1000, frames)
-        }
-    }
-}
-
 /// Virtual cameras are cameras: macOS only lets an app send frames to (or
 /// read from) one after the user allows camera access. For a command-line
 /// tool the permission belongs to the app it runs in (Terminal, iTerm, ...).
@@ -134,155 +108,27 @@ func setWebcamExposure(_ camera: EOSCamera) throws {
 
 // MARK: - Commands
 
-/// The current connection to the virtual camera. Camera extensions can restart
-/// (another app quits, macOS relaunches them), which silently strands an open
-/// sink; `run` swaps in a fresh one when that happens.
-final class SinkConnection {
-    let cameraName: String
-    private let lock = NSLock()
-    private var sink: VirtualCameraSink?
-    private(set) var sentBefore = 0
-    private(set) var droppedBefore = 0
-
-    init(cameraName: String) { self.cameraName = cameraName }
-
-    var isOpen: Bool { lock.withLock { sink != nil } }
-    /// Totals across reconnections.
-    var sent: Int { lock.withLock { sentBefore + (sink?.sent ?? 0) } }
-    var dropped: Int { lock.withLock { droppedBefore + (sink?.dropped ?? 0) } }
-
-    func send(_ frame: CVPixelBuffer) { lock.withLock { sink?.send(frame) } }
-
-    @discardableResult
-    func open() throws -> VirtualCameraSink {
-        let new = try VirtualCameraSink(cameraNamed: cameraName)
-        lock.withLock { sink = new }
-        return new
-    }
-
-    func close() {
-        lock.withLock {
-            guard let old = sink else { return }
-            sentBefore += old.sent
-            droppedBefore += old.dropped
-            old.stop()
-            sink = nil
-        }
-    }
-}
-
-/// The newest rendered camera frame, for the output clock to send.
-final class LatestFrame {
-    private let lock = NSLock()
-    private var frame: CVPixelBuffer?
-    private var arrived = Date.distantPast
-
-    func set(_ frame: CVPixelBuffer) { lock.withLock { self.frame = frame; arrived = Date() } }
-
-    /// The newest frame, unless it is older than `maxAge` (camera stalled or gone).
-    func get(maxAge: TimeInterval) -> CVPixelBuffer? {
-        lock.withLock { Date().timeIntervalSince(arrived) <= maxAge ? frame : nil }
-    }
-}
-
 func run(cameraName: String, mode: FrameRenderer.Mode, expose: Bool, fps: Double, direct: Bool, keepALO: Bool,
          cameraScreen: Bool) -> Never {
     ensureCameraAccess()
-    let connection = SinkConnection(cameraName: cameraName)
-    do { try connection.open() } catch { fail("\(error)") }
-    let output = fps > 0 ? String(format: "steady %g fps", fps) : "camera frame rate"
-    log("feeding \"\(cameraName)\" (\(mode.rawValue) mode, \(output)). Ctrl-C to stop.")
-
-    let renderer = FrameRenderer(mode: mode)
-    let stats = FrameStats()
+    var settings = FeedSettings()
+    settings.cameraName = cameraName
+    settings.mode = mode
+    settings.outputFPS = fps
+    settings.liveView.turnOffAutoLightingOptimizer = !keepALO
+    settings.liveView.showOnCameraScreen = cameraScreen
     let live = LiveView()
     live.useGPhoto2(preferDirectUSB: direct, onConnect: expose ? setWebcamExposure : nil)
-    live.options.turnOffAutoLightingOptimizer = !keepALO
-    live.options.showOnCameraScreen = cameraScreen
-    let counterLock = NSLock()
-    var cameraFrames = 0
-    let latest = LatestFrame()
-    live.onEvent = { event in
-        switch event {
-        case let .connected(model, direct):
-            log("camera connected: \(model), live view on (\(direct ? "direct USB" : "libgphoto2"))")
-        case let .waiting(reason): log("waiting: \(reason)")
-        case let .notice(message): log("note: \(message)")
-        case .cameraInUse: log("waiting: another app is using the camera (Photos, Image Capture, EOS Utility…)")
-        case let .battery(level): log("camera battery: \(level.text)")
-        }
+    let feed = WebcamFeed(settings: settings, liveView: live)
+    feed.onLog = log
+    feed.start()
+    if case .problem(.virtualCameraMissing) = feed.status {
+        feed.stop()
+        fail(feed.sinkError.map { "\($0)" } ?? "virtual camera \"\(cameraName)\" not found")
     }
-    live.onFrame = { jpeg in
-        counterLock.withLock { cameraFrames += 1 }
-        if let frame = renderer.render(jpeg: jpeg) {
-            if fps > 0 { latest.set(frame) } else { connection.send(frame) }
-            stats.frame()
-        }
-    }
-    live.start()
-
-    // Output clock: video apps get frames at a steady rate. When the camera
-    // hasn't produced a new frame yet, the newest one is sent again; after a
-    // second without frames (camera stalled or unplugged) nothing is sent.
-    let clockQueue = DispatchQueue(label: "canon-webcam.output", qos: .userInteractive)
-    let clock = DispatchSource.makeTimerSource(flags: .strict, queue: clockQueue)
-    if fps > 0 {
-        clock.schedule(deadline: .now(), repeating: 1 / fps, leeway: .milliseconds(1))
-        clock.setEventHandler {
-            if let frame = latest.get(maxAge: 1) { connection.send(frame) }
-        }
-        clock.resume()
-    }
-
-    // Watchdog: if the camera keeps delivering but the virtual camera stopped
-    // taking frames for ~2s, its extension restarted or something else took
-    // over its input. Reconnect by name.
-    var watchFrames = 0
-    var watchSent = 0
-    let watchdog = DispatchSource.makeTimerSource(queue: .main)
-    watchdog.schedule(deadline: .now() + 2, repeating: 2)
-    watchdog.setEventHandler {
-        let frames = counterLock.withLock { cameraFrames }
-        let sent = connection.sent
-        defer { watchFrames = frames; watchSent = sent }
-        if !connection.isOpen {
-            if (try? connection.open()) != nil { log("reconnected to \"\(cameraName)\"") }
-            return
-        }
-        if frames - watchFrames >= 5 && sent == watchSent {
-            log("\"\(cameraName)\" stopped taking frames (its extension restarted, or another app "
-                + "such as OBS started feeding it); reconnecting")
-            connection.close()
-            if (try? connection.open()) != nil {
-                log("reconnected to \"\(cameraName)\"")
-            } else {
-                log("waiting for \"\(cameraName)\" to come back")
-            }
-        }
-    }
-    watchdog.resume()
-
-    var lastSent = 0
-    var lastDropped = 0
-    let timer = DispatchSource.makeTimerSource(queue: .main)
-    timer.schedule(deadline: .now() + 10, repeating: 10)
-    timer.setEventHandler {
-        let s = stats.take()
-        let sent = connection.sent - lastSent, dropped = connection.dropped - lastDropped
-        lastSent = connection.sent; lastDropped = connection.dropped
-        guard s.frames > 0 else { return }
-        log(String(format: "%.1f fps from camera (median gap %.0f ms, max %.0f ms), sent %.1f fps, dropped %d",
-                   s.fps, s.medianMs, s.maxMs, Double(sent) / 10, dropped))
-    }
-    timer.resume()
-
-    runUntilInterrupted {
-        if fps > 0 { clock.cancel() }
-        timer.cancel()
-        watchdog.cancel()
-        live.stop()
-        connection.close()
-    }
+    let output = fps > 0 ? String(format: "steady %g fps", fps) : "camera frame rate"
+    log("feeding \"\(cameraName)\" (\(mode.rawValue) mode, \(output)). Ctrl-C to stop.")
+    runUntilInterrupted { feed.stop() }
 }
 
 func check(cameraName: String, seconds: Double, cameraScreen: Bool) -> Never {

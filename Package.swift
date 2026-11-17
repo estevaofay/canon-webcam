@@ -32,7 +32,11 @@ let package = Package(
         // Turns live-view JPEGs into 1920x1080 frames and pushes them into a
         // CoreMediaIO virtual camera's sink stream.
         .target(name: "VirtualCamera"),
-        .executableTarget(name: "canon-webcam", dependencies: ["CanonCapture", "VirtualCamera"]),
+        // The streaming loop shared by the CLI and the menu bar app: live view in,
+        // a steady frame rate out to the virtual camera, with reconnects.
+        .target(name: "WebcamFeed", dependencies: ["CanonUSB", "VirtualCamera"]),
+        .executableTarget(name: "canon-webcam", dependencies: ["CanonCapture", "VirtualCamera", "WebcamFeed"]),
         .testTarget(name: "CanonUSBTests", dependencies: ["CanonUSB"]),
+        .testTarget(name: "WebcamFeedTests", dependencies: ["WebcamFeed", "CanonUSB", "VirtualCamera"]),
     ]
 )
