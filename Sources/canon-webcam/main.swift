@@ -8,7 +8,8 @@ let usage = """
 canon-webcam: use an old Canon EOS DSLR (Rebel T3i/600D, T5/1200D, ...) as a webcam on macOS.
 
 USAGE
-  canon-webcam [run] [--camera NAME] [--fit] [--expose] [--fps N] [--keep-alo] [--gphoto2]
+  canon-webcam [run] [--camera NAME] [--fit] [--expose] [--fps N] [--keep-alo]
+                   [--no-camera-screen] [--gphoto2]
       Stream the DSLR's live view into a virtual camera until Ctrl-C.
       --camera NAME  virtual camera to feed (default: "OBS Virtual Camera";
                      use "Canon Webcam" for this project's own extension)
@@ -20,9 +21,12 @@ USAGE
       --keep-alo     leave Auto Lighting Optimizer as set on the camera. By default
                      it is switched off while streaming (about 28 instead of 21
                      fps on a Rebel T5) and restored when canon-webcam stops
+      --no-camera-screen
+                     send live view only to the computer (by default it also
+                     shows on the camera's own screen)
       --gphoto2      read live view through libgphoto2 instead of the faster
                      direct USB path (slower; for troubleshooting)
-  canon-webcam check [--camera NAME] [SECONDS]
+  canon-webcam check [--camera NAME] [--no-camera-screen] [SECONDS]
       Feed the virtual camera and read it back like a video app would, to
       confirm the DSLR's frames come out the other side (default: 15s).
   canon-webcam peek [--camera NAME] [-o FILE] [SECONDS]
@@ -32,7 +36,7 @@ USAGE
   canon-webcam info             show the connected DSLR and its exposure settings
   canon-webcam expose           set webcam-friendly exposure: 1/60s, ISO Auto
   canon-webcam snap [FILE]      save one live-view frame (default: snap.jpg)
-  canon-webcam bench [--keep-alo] [--gphoto2] [SECONDS]
+  canon-webcam bench [--keep-alo] [--no-camera-screen] [--gphoto2] [SECONDS]
                                 measure live-view frame rate (default: 15s)
 
 """
@@ -181,7 +185,8 @@ final class LatestFrame {
     }
 }
 
-func run(cameraName: String, mode: FrameRenderer.Mode, expose: Bool, fps: Double, direct: Bool, keepALO: Bool) -> Never {
+func run(cameraName: String, mode: FrameRenderer.Mode, expose: Bool, fps: Double, direct: Bool, keepALO: Bool,
+         cameraScreen: Bool) -> Never {
     ensureCameraAccess()
     let connection = SinkConnection(cameraName: cameraName)
     do { try connection.open() } catch { fail("\(error)") }
@@ -193,6 +198,7 @@ func run(cameraName: String, mode: FrameRenderer.Mode, expose: Bool, fps: Double
     let live = LiveView()
     live.useGPhoto2(preferDirectUSB: direct, onConnect: expose ? setWebcamExposure : nil)
     live.options.turnOffAutoLightingOptimizer = !keepALO
+    live.options.showOnCameraScreen = cameraScreen
     let counterLock = NSLock()
     var cameraFrames = 0
     let latest = LatestFrame()
@@ -203,6 +209,7 @@ func run(cameraName: String, mode: FrameRenderer.Mode, expose: Bool, fps: Double
         case let .waiting(reason): log("waiting: \(reason)")
         case let .notice(message): log("note: \(message)")
         case .cameraInUse: log("waiting: another app is using the camera (Photos, Image Capture, EOS Utility…)")
+        case let .battery(level): log("camera battery: \(level.text)")
         }
     }
     live.onFrame = { jpeg in
@@ -278,7 +285,7 @@ func run(cameraName: String, mode: FrameRenderer.Mode, expose: Bool, fps: Double
     }
 }
 
-func check(cameraName: String, seconds: Double) -> Never {
+func check(cameraName: String, seconds: Double, cameraScreen: Bool) -> Never {
     ensureCameraAccess()
     let sink: VirtualCameraSink
     let reader: VirtualCameraReader
@@ -290,6 +297,7 @@ func check(cameraName: String, seconds: Double) -> Never {
     let renderer = FrameRenderer()
     let live = LiveView()
     live.useGPhoto2(preferDirectUSB: true)
+    live.options.showOnCameraScreen = cameraScreen
     let lock = NSLock()
     var cameraFrames = 0
     live.onEvent = { event in
@@ -298,6 +306,7 @@ func check(cameraName: String, seconds: Double) -> Never {
         case let .waiting(reason): log("waiting: \(reason)")
         case let .notice(message): log("note: \(message)")
         case .cameraInUse: log("waiting: another app is using the camera (Photos, Image Capture, EOS Utility…)")
+        case let .battery(level): log("camera battery: \(level.text)")
         }
     }
     live.onFrame = { jpeg in
@@ -427,12 +436,13 @@ func snap(_ path: String) {
     } catch { fail("\(error)") }
 }
 
-func bench(seconds: Double, direct: Bool, keepALO: Bool) -> Never {
+func bench(seconds: Double, direct: Bool, keepALO: Bool, cameraScreen: Bool) -> Never {
     let stats = FrameStats()
     let renderer = FrameRenderer()
     let live = LiveView()
     live.useGPhoto2(preferDirectUSB: direct)
     live.options.turnOffAutoLightingOptimizer = !keepALO
+    live.options.showOnCameraScreen = cameraScreen
     var connectedAt: Date?
     live.onEvent = { event in
         switch event {
@@ -441,6 +451,7 @@ func bench(seconds: Double, direct: Bool, keepALO: Bool) -> Never {
         case let .waiting(reason): log("waiting: \(reason)")
         case let .notice(message): log("note: \(message)")
         case .cameraInUse: log("waiting: another app is using the camera (Photos, Image Capture, EOS Utility…)")
+        case let .battery(level): log("camera battery: \(level.text)")
         }
     }
     live.onFrame = { jpeg in
@@ -476,6 +487,7 @@ case "run":
     var fps = 24.0
     var direct = true
     var keepALO = false
+    var cameraScreen = true
     var i = 0
     while i < args.count {
         switch args[i] {
@@ -486,6 +498,7 @@ case "run":
         case "--expose": exposeOnConnect = true
         case "--gphoto2": direct = false
         case "--keep-alo": keepALO = true
+        case "--no-camera-screen": cameraScreen = false
         case "--fps":
             guard i + 1 < args.count, let value = Double(args[i + 1]), value >= 0, value <= 60 else {
                 fail("--fps needs a number from 0 to 60")
@@ -496,18 +509,21 @@ case "run":
         }
         i += 1
     }
-    run(cameraName: cameraName, mode: mode, expose: exposeOnConnect, fps: fps, direct: direct, keepALO: keepALO)
+    run(cameraName: cameraName, mode: mode, expose: exposeOnConnect, fps: fps, direct: direct, keepALO: keepALO,
+        cameraScreen: cameraScreen)
 case "check":
     var cameraName = "OBS Virtual Camera"
     var seconds = 15.0
+    var cameraScreen = true
     var i = 0
     while i < args.count {
         if args[i] == "--camera", i + 1 < args.count { cameraName = args[i + 1]; i += 1 }
+        else if args[i] == "--no-camera-screen" { cameraScreen = false }
         else if let s = Double(args[i]) { seconds = s }
         else { fail("unknown option \(args[i])\n\n\(usage)") }
         i += 1
     }
-    check(cameraName: cameraName, seconds: seconds)
+    check(cameraName: cameraName, seconds: seconds, cameraScreen: cameraScreen)
 case "peek":
     var cameraName = "OBS Virtual Camera"
     var seconds = 5.0
@@ -529,13 +545,15 @@ case "bench":
     var seconds = 15.0
     var direct = true
     var keepALO = false
+    var cameraScreen = true
     for arg in args {
         if arg == "--gphoto2" { direct = false }
         else if arg == "--keep-alo" { keepALO = true }
+        else if arg == "--no-camera-screen" { cameraScreen = false }
         else if let s = Double(arg) { seconds = s }
         else { fail("unknown option \(arg)\n\n\(usage)") }
     }
-    bench(seconds: seconds, direct: direct, keepALO: keepALO)
+    bench(seconds: seconds, direct: direct, keepALO: keepALO, cameraScreen: cameraScreen)
 case "help", "-h", "--help": print(usage)
 default: fail("unknown command \(command)\n\n\(usage)")
 }

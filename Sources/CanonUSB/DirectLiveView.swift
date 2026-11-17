@@ -84,6 +84,7 @@ public final class DirectLiveView {
         static let evfOutputDevice: UInt32 = 0xD1B0  // bit mask: 1 = camera screen, 2 = PC
         static let evfMode: UInt32 = 0xD1B1          // 1 = live view enabled
         static let autoLightingOptimizer: UInt32 = 0xD1C1  // 0 standard, 1 low, 2 high, 3 off
+        static let batteryLevel: UInt32 = 0xD111  // see BatteryLevel
     }
 
     private static let canonVendorID: UInt16 = 0x04A9
@@ -95,6 +96,11 @@ public final class DirectLiveView {
     /// Set when the camera's Auto Lighting Optimizer could not be switched off
     /// (live view then runs slower), saying why.
     public private(set) var autoLightingOptimizerProblem: String?
+    /// The camera's battery level, once it has reported it.
+    public private(set) var battery: BatteryLevel?
+
+    /// EVFOutputDevice value: a bit mask, 1 = camera screen, 2 = computer.
+    public static func evfOutputDevice(showOnCameraScreen: Bool) -> UInt32 { showOnCameraScreen ? 3 : 2 }
     private var serialNumber = ""
 
     private var context: OpaquePointer?
@@ -258,17 +264,18 @@ public final class DirectLiveView {
     private func startLiveView() throws {
         try expect(transaction(Op.setRemoteMode, [1]), "enable remote control")
         try expect(transaction(Op.setEventMode, [1]), "enable camera events")
-        _ = try transaction(Op.getEvent)  // the camera reports all its settings once
-        if turnOffAutoLightingOptimizer { try switchOffAutoLightingOptimizer(settings: currentSettings()) }
+        let settings = try getEvent()  // the camera reports all its settings once
+        if turnOffAutoLightingOptimizer { try switchOffAutoLightingOptimizer(settings: settings) }
 
-        // Live view on, sent to the PC. Right after connecting the camera can
+        // Live view on, sent to the PC (and the camera's screen, if asked).
+        // Right after connecting the camera can
         // answer "busy" for a moment.
         _ = try setProperty(Prop.evfMode, 1)
         var result = Response.deviceBusy
         for _ in 0..<20 {
-            result = try setProperty(Prop.evfOutputDevice, 2)
+            result = try setProperty(Prop.evfOutputDevice, Self.evfOutputDevice(showOnCameraScreen: options.showOnCameraScreen))
             if result == Response.ok { break }
-            _ = try transaction(Op.getEvent)
+            try getEvent()
             usleep(100_000)
         }
         try expect(result, "start live view")
@@ -330,7 +337,7 @@ public final class DirectLiveView {
         let now = Date()
         guard now.timeIntervalSince(lastHousekeeping) >= 1 else { return }
         lastHousekeeping = now
-        _ = try? transaction(Op.getEvent)
+        _ = try? getEvent()
         if supportedOps.contains(Op.keepDeviceOn) && now.timeIntervalSince(lastKeepAwake) >= 30 {
             lastKeepAwake = now
             _ = try? transaction(Op.keepDeviceOn)
@@ -391,22 +398,13 @@ public final class DirectLiveView {
         }
     }
 
-    /// Reads property values from the GetEvent reply in `buffer`: a list of
-    /// records (u32 size, u32 type, ...); type 0xC189 is "property value
-    /// changed" (u32 property, then the value).
-    private func currentSettings() -> [UInt32: UInt32] {
-        var settings: [UInt32: UInt32] = [:]
-        var offset = 12
-        let end = 12 + lastDataLength
-        while offset + 8 <= end {
-            let size = Int(load32(offset))
-            let type = load32(offset + 4)
-            guard size >= 8, offset + size <= end else { break }
-            if type == 0xC189 && size >= 16 {
-                settings[load32(offset + 8)] = load32(offset + 12)
-            }
-            offset += size
-        }
+    /// Runs GetEvent (the camera stalls if its event queue isn't drained) and
+    /// returns the property values it reported; keeps `battery` up to date.
+    @discardableResult
+    private func getEvent() throws -> [UInt32: UInt32] {
+        _ = try transaction(Op.getEvent)
+        let settings = CanonEvents.propertyValues(in: Data(bytes: buffer.advanced(by: 12), count: lastDataLength))
+        if let value = settings[Prop.batteryLevel], let level = BatteryLevel(canonValue: value) { battery = level }
         return settings
     }
 
@@ -455,7 +453,7 @@ public final class DirectLiveView {
         for _ in 0..<20 {
             result = try setProperty(property, value)
             if result != Response.deviceBusy { break }
-            _ = try transaction(Op.getEvent)
+            try getEvent()
             usleep(100_000)
         }
         return result

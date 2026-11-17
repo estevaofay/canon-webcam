@@ -45,6 +45,8 @@ public final class LiveView {
         case cameraInUse
         /// Streaming works, but something is worth telling the user.
         case notice(String)
+        /// The camera's battery level, after connecting and when it changes.
+        case battery(BatteryLevel)
     }
 
     /// Opens a camera and starts live view. Defaults to Canon EOS over USB.
@@ -173,12 +175,18 @@ public final class LiveView {
             if let problem = (camera as? DirectLiveView)?.autoLightingOptimizerProblem { onEvent(.notice(problem)) }
             lastReason = ""
 
+            let usbCamera = camera as? DirectLiveView
+            var battery: BatteryLevel?
             var failures = 0
             while !run.isStopped {
                 do {
                     let jpeg = try camera.nextFrame()
                     failures = 0
                     deliver(jpeg)
+                    if let level = usbCamera?.battery, level != battery {
+                        battery = level
+                        onEvent(.battery(level))
+                    }
                 } catch {
                     // Busy/transient errors happen while the camera autofocuses or
                     // meters; give it a few tries before reconnecting.

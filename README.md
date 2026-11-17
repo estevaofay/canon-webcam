@@ -68,7 +68,8 @@ If you have a membership:
 ## Usage
 
 ```
-canon-webcam [run] [--camera NAME] [--fit] [--expose] [--fps N] [--keep-alo] [--gphoto2]
+canon-webcam [run] [--camera NAME] [--fit] [--expose] [--fps N] [--keep-alo]
+                   [--no-camera-screen] [--gphoto2]
     Stream live view into a virtual camera until Ctrl-C.
     --camera NAME  virtual camera to feed (default "OBS Virtual Camera")
     --fit          show the whole 3:2 frame with side bars (default: crop to 16:9)
@@ -77,9 +78,12 @@ canon-webcam [run] [--camera NAME] [--fit] [--expose] [--fps N] [--keep-alo] [--
                    when the next isn't ready (default 24; 0 = as they arrive)
     --keep-alo     leave Auto Lighting Optimizer as set on the camera (by default
                    it is off while streaming and restored afterwards)
+    --no-camera-screen
+                   send live view only to the computer (by default it also
+                   shows on the camera's own screen)
     --gphoto2      read live view through libgphoto2 instead of the faster
                    direct USB path (for troubleshooting)
-canon-webcam check [--camera NAME] [SECONDS]
+canon-webcam check [--camera NAME] [--no-camera-screen] [SECONDS]
     Feed the virtual camera and read it back like a video app, to confirm the
     DSLR's frames come out the other side.
 canon-webcam peek [--camera NAME] [-o FILE] [SECONDS]
@@ -89,7 +93,7 @@ canon-webcam cameras          list virtual cameras that accept frames
 canon-webcam info             camera model, live-view support, exposure, battery
 canon-webcam expose           set webcam-friendly exposure: 1/60s, ISO Auto
 canon-webcam snap [FILE]      save one live-view frame as JPEG
-canon-webcam bench [--keep-alo] [--gphoto2] [SECONDS]
+canon-webcam bench [--keep-alo] [--no-camera-screen] [--gphoto2] [SECONDS]
                               measure the live-view frame rate
 ```
 
@@ -99,6 +103,7 @@ If the camera is unplugged, switched off or times out, canon-webcam keeps runnin
 
 - **Exposure.** With the mode dial on **M**, live view shows the exposure you set: at 1/4000s it is almost black. Run `canon-webcam expose` once (1/60s, ISO Auto), or use `--expose`. **P** mode also works.
 - **Frame rate.** Over USB a Rebel T3i delivers its full 30 live-view frames per second and a Rebel T5 about 28; canon-webcam sends apps a steady 24 fps (`--fps 30` also works; on a T5 about one frame in twenty is then a repeat). Both run live view on a 30 fps clock, but on the T5 the **Auto Lighting Optimizer** (ALO) processing makes it miss slots: with ALO on, it manages about 21 fps (the T3i keeps up either way). canon-webcam therefore switches ALO off while streaming and puts your setting back when it stops; `--keep-alo` leaves it alone. If canon-webcam is force-quit or the camera is unplugged while streaming, the next run with that camera restores it. With the mode dial on the movie position, a T3i refuses setting changes, so ALO stays as it is (the movie position has its own ALO setting); P or M avoids that. Shutter speed, ISO, autofocus method, picture style and live-view size made no real difference in our tests, and movie mode is no faster. A true 30 or 60 needs the camera's HDMI output and a capture device, and on the T5 that output includes the camera's on-screen information.
+- **Camera screen.** While streaming, live view also shows on the camera's own screen, which helps with framing and focus; it costs no frame rate. `--no-camera-screen` turns it off.
 - **Focus** once, manually or with a half-press, before you start. These bodies have no continuous autofocus in live view.
 - **Power.** Live view drains the battery in well under an hour. Use an AC dummy battery: Canon ACK-E8 for the T3i (LP-E8), ACK-E10 for the T5 (LP-E10), or a third-party equivalent.
 - **Turn off auto power-off** (camera menu → Auto power off → Disable).
