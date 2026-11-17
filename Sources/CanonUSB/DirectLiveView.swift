@@ -15,6 +15,9 @@ public struct PTPError: Error, CustomStringConvertible {
         case response(UInt16)
         /// The camera sent something that isn't valid PTP.
         case malformed
+        /// Another app (Photos, Image Capture, EOS Utility…) has the camera's
+        /// USB interface.
+        case claimFailed(Int32)
 
         public var isUnsupported: Bool {
             if case .unsupported = self { return true }
@@ -36,7 +39,8 @@ public struct PTPError: Error, CustomStringConvertible {
         switch kind {
         case .noCamera: return "\(action) failed: no Canon camera on USB"
         case .unsupported: return "\(action): this camera has no Canon EOS live view"
-        case let .usb(code): return "\(action) failed: \(String(cString: libusb_error_name(code))) (\(code))"
+        case let .usb(code), let .claimFailed(code):
+            return "\(action) failed: \(String(cString: libusb_error_name(code))) (\(code))"
         case let .response(code): return "\(action) failed: camera replied 0x\(String(code, radix: 16))"
         case .malformed: return "\(action) failed: unexpected reply from camera"
         }
@@ -106,19 +110,20 @@ public final class DirectLiveView {
     private var liveViewStarted = false
     private var lastHousekeeping = Date.distantPast
     private var lastKeepAwake = Date.distantPast
-    private let turnOffAutoLightingOptimizer: Bool
+    private let options: LiveViewOptions
+    private var turnOffAutoLightingOptimizer: Bool { options.turnOffAutoLightingOptimizer }
     /// The camera's own ALO setting, to put back on close (nil: not changed).
     private var savedAutoLightingOptimizer: UInt32?
 
     /// Connects to the first Canon camera on USB and starts live view.
     /// Throws `.unsupported` for cameras that need libgphoto2 instead.
     ///
-    /// With `turnOffAutoLightingOptimizer`, Auto Lighting Optimizer is switched
+    /// With `options.turnOffAutoLightingOptimizer`, Auto Lighting Optimizer is switched
     /// off while streaming and restored on `close()`. ALO post-processes every
     /// live-view frame; on a Rebel T5 it makes the camera miss its 30 Hz frame
     /// slots, and turning it off takes live view from about 21 to about 28.5 fps.
-    public init(turnOffAutoLightingOptimizer: Bool = true) throws {
-        self.turnOffAutoLightingOptimizer = turnOffAutoLightingOptimizer
+    public init(options: LiveViewOptions = LiveViewOptions()) throws {
+        self.options = options
         capacity = 1 << 20
         buffer = UnsafeMutableRawPointer.allocate(byteCount: capacity, alignment: 16)
         do {
@@ -177,7 +182,7 @@ public final class DirectLiveView {
             if claimed == 0 { break }
             usleep(200_000)
         }
-        guard claimed == 0 else { throw PTPError(kind: .usb(claimed), action: "claim the USB device") }
+        guard claimed == 0 else { throw PTPError(kind: .claimFailed(claimed), action: "claim the USB device") }
 
         // A previous run that was killed mid-frame can leave the camera halfway
         // through a transfer, and it then ignores new commands. Throw away
@@ -599,5 +604,17 @@ public final class DirectLiveView {
         model = try string()
         _ = try? string()   // device version
         serialNumber = (try? string()) ?? ""  // only used, hashed, to name the saved-ALO file
+    }
+}
+
+extension PTPError: CameraConnectionError {
+    public var isNoCamera: Bool {
+        if case .noCamera = kind { return true }
+        return false
+    }
+    public var isUnsupported: Bool { kind.isUnsupported }
+    public var isInUse: Bool {
+        if case .claimFailed = kind { return true }
+        return false
     }
 }

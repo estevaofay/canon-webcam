@@ -191,18 +191,18 @@ func run(cameraName: String, mode: FrameRenderer.Mode, expose: Bool, fps: Double
     let renderer = FrameRenderer(mode: mode)
     let stats = FrameStats()
     let live = LiveView()
-    live.preferDirectUSB = direct
-    live.turnOffAutoLightingOptimizer = !keepALO
+    live.useGPhoto2(preferDirectUSB: direct, onConnect: expose ? setWebcamExposure : nil)
+    live.options.turnOffAutoLightingOptimizer = !keepALO
     let counterLock = NSLock()
     var cameraFrames = 0
     let latest = LatestFrame()
-    if expose { live.onConnect = setWebcamExposure }
     live.onEvent = { event in
         switch event {
         case let .connected(model, direct):
             log("camera connected: \(model), live view on (\(direct ? "direct USB" : "libgphoto2"))")
         case let .waiting(reason): log("waiting: \(reason)")
         case let .notice(message): log("note: \(message)")
+        case .cameraInUse: log("waiting: another app is using the camera (Photos, Image Capture, EOS Utility…)")
         }
     }
     live.onFrame = { jpeg in
@@ -289,6 +289,7 @@ func check(cameraName: String, seconds: Double) -> Never {
 
     let renderer = FrameRenderer()
     let live = LiveView()
+    live.useGPhoto2(preferDirectUSB: true)
     let lock = NSLock()
     var cameraFrames = 0
     live.onEvent = { event in
@@ -296,6 +297,7 @@ func check(cameraName: String, seconds: Double) -> Never {
         case let .connected(model, _): log("camera connected: \(model)")
         case let .waiting(reason): log("waiting: \(reason)")
         case let .notice(message): log("note: \(message)")
+        case .cameraInUse: log("waiting: another app is using the camera (Photos, Image Capture, EOS Utility…)")
         }
     }
     live.onFrame = { jpeg in
@@ -429,8 +431,8 @@ func bench(seconds: Double, direct: Bool, keepALO: Bool) -> Never {
     let stats = FrameStats()
     let renderer = FrameRenderer()
     let live = LiveView()
-    live.preferDirectUSB = direct
-    live.turnOffAutoLightingOptimizer = !keepALO
+    live.useGPhoto2(preferDirectUSB: direct)
+    live.options.turnOffAutoLightingOptimizer = !keepALO
     var connectedAt: Date?
     live.onEvent = { event in
         switch event {
@@ -438,6 +440,7 @@ func bench(seconds: Double, direct: Bool, keepALO: Bool) -> Never {
             log("\(model) (\(direct ? "direct USB" : "libgphoto2")): measuring for \(Int(seconds))s after the first frame…")
         case let .waiting(reason): log("waiting: \(reason)")
         case let .notice(message): log("note: \(message)")
+        case .cameraInUse: log("waiting: another app is using the camera (Photos, Image Capture, EOS Utility…)")
         }
     }
     live.onFrame = { jpeg in

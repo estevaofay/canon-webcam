@@ -1,3 +1,4 @@
+import CanonUSB
 import CGPhoto2
 import Foundation
 
@@ -16,24 +17,16 @@ public struct CameraError: Error, CustomStringConvertible {
     }
 }
 
+extension CameraError: CameraConnectionError {
+    public var isNoCamera: Bool { code == GP_ERROR_MODEL_NOT_FOUND }
+    public var isUnsupported: Bool { code == GP_ERROR_NOT_SUPPORTED }
+    /// Another app (Photos, Image Capture, EOS Utility…) has the camera.
+    public var isInUse: Bool { code == GP_ERROR_IO_USB_CLAIM }
+}
+
 @inline(__always)
 func check(_ result: Int32, _ action: @autoclosure () -> String) throws {
     if result < GP_OK { throw CameraError(code: result, action: action()) }
-}
-
-/// macOS runs `ptpcamerad`, which grabs every PTP camera as soon as it is
-/// plugged in (for Photos / Image Capture) and respawns when killed. libgphoto2
-/// can only claim the USB interface in the short window after it is killed.
-public enum MacOSCameraDaemon {
-    public static func release() {
-        let pkill = Process()
-        pkill.executableURL = URL(fileURLWithPath: "/usr/bin/pkill")
-        pkill.arguments = ["-9", "-f", "/usr/libexec/ptpcamerad"]
-        pkill.standardOutput = FileHandle.nullDevice
-        pkill.standardError = FileHandle.nullDevice
-        try? pkill.run()
-        pkill.waitUntilExit()
-    }
 }
 
 /// A Canon EOS (or any libgphoto2 camera with live view) connected over USB.

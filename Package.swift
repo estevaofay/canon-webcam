@@ -23,11 +23,16 @@ let package = Package(
             pkgConfig: "libusb-1.0",
             providers: [.brew(["libusb"])]
         ),
-        // Talks to the camera: connect, live view frames, exposure settings.
-        .target(name: "CanonCapture", dependencies: ["CGPhoto2", "CLibUSB"]),
+        // Canon EOS live view straight over USB (libusb only, no libgphoto2), and
+        // the reconnecting live-view loop. Used by the CLI and the menu bar app.
+        .target(name: "CanonUSB", dependencies: ["CLibUSB"]),
+        // libgphoto2 on top: info, exposure, snapshots, and live view for
+        // cameras the direct path doesn't support. CLI only.
+        .target(name: "CanonCapture", dependencies: ["CGPhoto2", "CanonUSB"]),
         // Turns live-view JPEGs into 1920x1080 frames and pushes them into a
         // CoreMediaIO virtual camera's sink stream.
         .target(name: "VirtualCamera"),
         .executableTarget(name: "canon-webcam", dependencies: ["CanonCapture", "VirtualCamera"]),
+        .testTarget(name: "CanonUSBTests", dependencies: ["CanonUSB"]),
     ]
 )
