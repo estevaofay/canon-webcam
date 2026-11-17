@@ -1,6 +1,6 @@
 PREFIX ?= $(HOME)/.local
 
-.PHONY: build install uninstall app dmg extension clean
+.PHONY: build install uninstall app dmg release release-check extension clean
 
 # The command-line tool (captures the DSLR and feeds a virtual camera).
 build:
@@ -20,6 +20,13 @@ app:
 
 dmg:
 	scripts/make-app.sh --dmg
+
+# Publish the version in VERSION on GitHub (see docs/RELEASING.md).
+release:
+	scripts/release.sh
+
+release-check:
+	scripts/release.sh --dry-run
 
 # The optional "Canon Webcam" Camera Extension + host app. Builds unsigned;
 # installing it needs a signed build (see README).

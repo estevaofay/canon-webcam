@@ -34,6 +34,13 @@ bundled=$app/Contents/Frameworks/libusb-1.0.0.dylib
 cp "$(realpath "$libusb")" "$bundled"
 chmod u+w "$bundled"
 install_name_tool -id @rpath/libusb-1.0.0.dylib "$bundled" 2>/dev/null
+# libusb is LGPL-2.1: ship its license, and say which version and where its source is.
+libusb_home=$(cd "$(dirname "$(realpath "$libusb")")/.." && pwd)
+cp "$libusb_home/COPYING" "$app/Contents/Resources/libusb-COPYING.txt"
+libusb_version=$(basename "$libusb_home")
+printf 'canon-webcam bundles libusb %s (LGPL-2.1, see libusb-COPYING.txt), unmodified,\nas Contents/Frameworks/libusb-1.0.0.dylib, which you may replace.\nSource: https://github.com/libusb/libusb/releases/tag/v%s\n' \
+    "$libusb_version" "$libusb_version" > "$app/Contents/Resources/THIRD-PARTY-NOTICES.txt"
+cp LICENSE "$app/Contents/Resources/LICENSE.txt"
 install_name_tool -change "$libusb" @executable_path/../Frameworks/libusb-1.0.0.dylib "$exe" 2>/dev/null
 
 # The toolchain adds a search path into this Mac's Xcode; the app mustn't look there.

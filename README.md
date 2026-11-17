@@ -34,7 +34,7 @@ macOS only lets signed Camera Extensions provide virtual cameras. OBS Studio shi
 
 For now the app needs an Apple silicon Mac running macOS 27 or later.
 
-1. Download `canon-webcam-<version>.dmg` from the [Releases page](https://github.com/estevaofay/canon-webcam/releases), open it, and drag **canon-webcam** to **Applications**.
+1. Download `canon-webcam-<version>.dmg` from the [latest release](https://github.com/estevaofay/canon-webcam/releases/latest), open it, and drag **canon-webcam** to **Applications**. What changed in each version is in [CHANGELOG.md](CHANGELOG.md).
 2. Open it. The app isn't signed with an Apple Developer ID, so the first time macOS refuses to open it. Go to **System Settings → Privacy & Security**, scroll down to the message about canon-webcam, click **Open Anyway**, and confirm.
 3. When macOS asks whether canon-webcam may use the camera, click **Allow**: feeding a virtual camera counts as camera access, and without it macOS silently drops every frame. macOS asks again after each update, because every build has a new signature.
 4. Connect the camera over USB, set the mode dial to P or M, and switch it on. The camera icon in the menu bar gets a red dot when it's live; click it to see what video apps see.
@@ -140,6 +140,14 @@ If the camera is unplugged, switched off or times out, canon-webcam keeps runnin
 - `Extension/` is a Camera Extension with exactly that sink → source design, written from scratch for this project.
 - `scripts/t5cam.sh` is the original shell prototype, using the `gphoto2` command-line tool and ffmpeg. It is kept as a dependency-light fallback.
 
+## Contributing
+
+Bug reports, camera reports ("works with my EOS …") and pull requests are welcome. Please open an issue first for anything big.
+
+- Build and test: `swift test`, `make install` (command-line tool), `make app` (menu bar app in `dist/`).
+- Hardware checks: with a camera connected, `canon-webcam bench` measures live view and `canon-webcam check` confirms frames reach the virtual camera.
+- Releases are made with `make release`; see [docs/RELEASING.md](docs/RELEASING.md).
+
 ## License
 
-MIT; see [LICENSE](LICENSE). libgphoto2 and libusb are LGPL-2.1 and are linked dynamically from your Homebrew install. Not affiliated with Canon or OBS Studio.
+MIT; see [LICENSE](LICENSE). libgphoto2 and libusb are LGPL-2.1. The command-line tool links them dynamically from your Homebrew install; the menu bar app ships an unmodified copy of libusb as a replaceable dynamic library, with its license and a pointer to its source in `canon-webcam.app/Contents/Resources`. Not affiliated with Canon or OBS Studio.
