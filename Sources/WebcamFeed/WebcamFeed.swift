@@ -37,7 +37,9 @@ public enum FeedStatus: Equatable {
 /// Streams the DSLR's live view into a virtual camera: frames in from
 /// `LiveView`, a steady frame rate out, reconnecting to either side when it
 /// goes away. Shared by the command-line tool and the menu bar app.
-public final class WebcamFeed {
+/// Thread-safe: state is behind a lock, so `start`/`stop` can run on any queue
+/// (set `onChange`/`onLog` before starting).
+public final class WebcamFeed: @unchecked Sendable {
     public private(set) var settings: FeedSettings {
         get { lock.withLock { _settings } }
         set { lock.withLock { _settings = newValue } }
