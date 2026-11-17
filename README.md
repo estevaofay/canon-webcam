@@ -23,6 +23,27 @@ Run `canon-webcam info` to check your camera. If it reports `Live view: supporte
 
 ## Install
 
+### 1. OBS Virtual Camera (free, no Apple account)
+
+macOS only lets signed Camera Extensions provide virtual cameras. OBS Studio ships one that is already signed. Its input accepts frames from any app, so canon-webcam can feed it directly. OBS itself does not need to be running.
+
+1. Install [OBS Studio](https://obsproject.com/download) (or `brew install --cask obs`).
+2. Open OBS once and click **Start Virtual Camera**. macOS will ask you to allow the camera extension: go to **System Settings → General → Login Items & Extensions → Camera Extensions** and switch on **OBS Virtual Camera**. Then quit OBS.
+
+### 2. The menu bar app
+
+For now the app needs an Apple silicon Mac running macOS 27 or later.
+
+1. Download `canon-webcam-<version>.dmg` from the [Releases page](https://github.com/estevaofay/canon-webcam/releases), open it, and drag **canon-webcam** to **Applications**.
+2. Open it. The app isn't signed with an Apple Developer ID, so the first time macOS refuses to open it. Go to **System Settings → Privacy & Security**, scroll down to the message about canon-webcam, click **Open Anyway**, and confirm.
+3. When macOS asks whether canon-webcam may use the camera, click **Allow**: feeding a virtual camera counts as camera access, and without it macOS silently drops every frame. macOS asks again after each update, because every build has a new signature.
+4. Connect the camera over USB, set the mode dial to P or M, and switch it on. The camera icon in the menu bar gets a red dot when it's live; click it to see what video apps see.
+5. In Zoom, Meet or FaceTime, choose **OBS Virtual Camera**.
+
+To build the app and the DMG yourself: install the Xcode Command Line Tools and `brew install libusb`, then run `make dmg` (the app is written to `dist/`).
+
+### Or: the command-line tool
+
 You need macOS 13 or later, [Homebrew](https://brew.sh), and the Xcode Command Line Tools (`xcode-select --install`).
 
 ```bash
@@ -32,27 +53,17 @@ cd canon-webcam
 make install          # builds and installs to ~/.local/bin/canon-webcam
 ```
 
-Then pick a virtual camera for it to feed.
+With OBS Virtual Camera allowed (step 1 above), connect the camera over USB, switch it on, and run:
 
-### Option A: OBS Virtual Camera (free, no Apple account)
+```bash
+canon-webcam
+```
 
-macOS only lets signed Camera Extensions provide virtual cameras. OBS Studio ships one that is already signed. Its input accepts frames from any app, so canon-webcam can feed it directly. OBS itself does not need to be running.
-
-1. Install OBS: `brew install --cask obs`
-2. Open OBS once and click **Start Virtual Camera**. macOS will ask you to allow the camera extension: go to **System Settings → General → Login Items & Extensions → Camera Extensions** and switch on **OBS Virtual Camera**. Then quit OBS.
-3. Connect the camera over USB, switch it on, and run:
-
-   ```bash
-   canon-webcam
-   ```
-
-   The first time, macOS asks whether your terminal app (Terminal, iTerm, …) may use the camera. Click **Allow**: feeding a virtual camera counts as camera access, and without it macOS silently drops every frame.
-
-4. In Zoom, Meet or FaceTime, choose **OBS Virtual Camera**.
+The first time, macOS asks whether your terminal app (Terminal, iTerm, …) may use the camera. Click **Allow**. Then choose **OBS Virtual Camera** in your video app.
 
 To confirm the whole path works without opening a video app, run `canon-webcam check`. It feeds the virtual camera and reads it back the way Zoom would, then reports how many of the DSLR's own frames came out.
 
-### Option B: this repo's own "Canon Webcam" camera (needs an Apple Developer account)
+### Without OBS: this repo's own "Canon Webcam" camera (needs an Apple Developer account)
 
 The `Extension/` folder contains a native Camera Extension that shows up as **Canon Webcam**, plus a small app that installs it. Camera Extensions are *system extensions*: macOS only installs them when they are signed by a paid Apple Developer team with the System Extension capability, and when the host app is in `/Applications`. A free Apple ID ("Personal Team") cannot get that entitlement. Unsigned builds compile, but macOS refuses to load them while System Integrity Protection is on.
 
@@ -114,7 +125,7 @@ If the camera is unplugged, switched off or times out, canon-webcam keeps runnin
 | Symptom | Fix |
 | --- | --- |
 | `Could not claim the USB device` | Another app has the camera (Photos, Image Capture, EOS Utility, gphoto2). Quit it and retry. |
-| `virtual camera "OBS Virtual Camera" not found` | The OBS camera extension isn't allowed yet: see Option A, step 2. `canon-webcam cameras` lists what is available. |
+| `virtual camera "OBS Virtual Camera" not found` | The OBS camera extension isn't allowed yet: see Install, step 1. `canon-webcam cameras` lists what is available. |
 | `camera access is not allowed for the app running canon-webcam` | Allow your terminal app in **System Settings → Privacy & Security → Camera**. |
 | Apps only show the OBS placeholder; `check` reports 0 DSLR frames | The camera extension can get stuck if something fed it without camera permission. Restart it: switch **OBS Virtual Camera** off and on in System Settings → General → Login Items & Extensions → Camera Extensions (or run `sudo killall com.obsproject.obs-studio.mac-camera-extension`; macOS relaunches it). |
 | `peek` shows the DSLR, but Meet/Zoom shows something else or doesn't list the camera | The app is holding an old connection, typically after the camera extension restarted: pick another camera and switch back, or quit the app or browser completely (Cmd-Q) and reopen it. Reloading the tab is not enough. Run only one `canon-webcam` at a time: two copies keep taking the DSLR from each other. If it shows an OBS scene, the OBS app's own **Start Virtual Camera** is on and competing for the camera: stop it in OBS. Browsers also need camera access in System Settings → Privacy & Security → Camera. |

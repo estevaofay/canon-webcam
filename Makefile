@@ -1,6 +1,6 @@
 PREFIX ?= $(HOME)/.local
 
-.PHONY: build install uninstall extension clean
+.PHONY: build install uninstall app dmg extension clean
 
 # The command-line tool (captures the DSLR and feeds a virtual camera).
 build:
@@ -14,6 +14,13 @@ install: build
 uninstall:
 	rm -f "$(PREFIX)/bin/canon-webcam"
 
+# The menu bar app: dist/canon-webcam.app, and a DMG to share it.
+app:
+	scripts/make-app.sh
+
+dmg:
+	scripts/make-app.sh --dmg
+
 # The optional "Canon Webcam" Camera Extension + host app. Builds unsigned;
 # installing it needs a signed build (see README).
 extension:
@@ -23,4 +30,4 @@ extension:
 	@echo "built .build/xcode/Build/Products/Release/CanonWebcam.app (unsigned)"
 
 clean:
-	rm -rf .build
+	rm -rf .build dist
