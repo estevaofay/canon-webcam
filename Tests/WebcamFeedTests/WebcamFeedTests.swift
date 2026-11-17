@@ -121,7 +121,9 @@ final class WebcamFeedTests: XCTestCase {
             if n == 1 { return JPEGCamera(frames: 1) }
             throw FakeError.noCamera
         })
-        let feed = WebcamFeed(settings: FeedSettings(), liveView: live, openSink: { _ in sink }, cameraAccess: { true })
+        var settings = FeedSettings()
+        settings.outputFPS = 24
+        let feed = WebcamFeed(settings: settings, liveView: live, openSink: { _ in sink }, cameraAccess: { true })
         feed.start()
         defer { feed.stop() }
 
@@ -136,6 +138,26 @@ final class WebcamFeedTests: XCTestCase {
         let later = sink.sent
         usleep(500_000)
         XCTAssertEqual(sink.sent, later, "kept sending a stale frame")
+    }
+
+    func testByDefaultEachCameraFrameIsSentOnce() {
+        let sink = FakeSink()
+        let lock = NSLock()
+        var connects = 0
+        let live = LiveView(connect: { _ in
+            let n = lock.withLock { connects += 1; return connects }
+            if n == 1 { return JPEGCamera(frames: 3) }
+            throw FakeError.noCamera
+        })
+        let feed = WebcamFeed(settings: FeedSettings(), liveView: live, openSink: { _ in sink }, cameraAccess: { true })
+        feed.start()
+        defer { feed.stop() }
+
+        // Video apps get the camera's own frame rate: every frame as it
+        // arrives, none repeated, none held back for a clock tick.
+        XCTAssertTrue(wait(2) { sink.sent >= 3 })
+        usleep(500_000)
+        XCTAssertEqual(sink.sent, 3)
     }
 
     func testStopStopsLiveViewAndClosesSink() {

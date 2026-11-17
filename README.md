@@ -7,7 +7,7 @@ Canon's EOS Webcam Utility has dropped (or never had) support for many older bod
 ```
  Canon DSLR ──USB──▶ canon-webcam ──frames──▶ virtual camera ──▶ Zoom / Meet / FaceTime
             (live view: ~28 fps JPEG,       (OBS Virtual Camera, or this
-             1056×704; sent at 24 fps)       repo's own "Canon Webcam")
+             1056×704; sent as it arrives)   repo's own "Canon Webcam")
 ```
 
 ## Supported cameras
@@ -16,8 +16,8 @@ canon-webcam should work with any camera that libgphoto2 can stream live view fr
 
 | Camera | Status |
 | --- | --- |
-| EOS Rebel T5 / 1200D / Kiss X70 | Tested end to end through OBS Virtual Camera: 1056×704, about 28 fps from the camera, sent to apps at a steady 24 fps |
-| EOS Rebel T3i / 600D / Kiss X5 | Tested end to end through OBS Virtual Camera: 1056×704, about 30 fps from the camera, sent to apps at a steady 24 fps |
+| EOS Rebel T5 / 1200D / Kiss X70 | Tested end to end through OBS Virtual Camera: 1056×704, about 28 fps from the camera and to apps |
+| EOS Rebel T3i / 600D / Kiss X5 | Tested end to end through OBS Virtual Camera: 1056×704, about 30 fps from the camera and to apps |
 
 Run `canon-webcam info` to check your camera. If it reports `Live view: supported`, it should work. Reports for other models are welcome.
 
@@ -75,7 +75,7 @@ canon-webcam [run] [--camera NAME] [--fit] [--expose] [--fps N] [--keep-alo]
     --fit          show the whole 3:2 frame with side bars (default: crop to 16:9)
     --expose       set 1/60s + ISO Auto on every connect (mode dial on M)
     --fps N        send apps a steady N fps, repeating the newest camera frame
-                   when the next isn't ready (default 24; 0 = as they arrive)
+                   when the next isn't ready (default 0 = each frame as it arrives)
     --keep-alo     leave Auto Lighting Optimizer as set on the camera (by default
                    it is off while streaming and restored afterwards)
     --no-camera-screen
@@ -102,7 +102,7 @@ If the camera is unplugged, switched off or times out, canon-webcam keeps runnin
 ## Camera tips
 
 - **Exposure.** With the mode dial on **M**, live view shows the exposure you set: at 1/4000s it is almost black. Run `canon-webcam expose` once (1/60s, ISO Auto), or use `--expose`. **P** mode also works.
-- **Frame rate.** Over USB a Rebel T3i delivers its full 30 live-view frames per second and a Rebel T5 about 28; canon-webcam sends apps a steady 24 fps (`--fps 30` also works; on a T5 about one frame in twenty is then a repeat). Both run live view on a 30 fps clock, but on the T5 the **Auto Lighting Optimizer** (ALO) processing makes it miss slots: with ALO on, it manages about 21 fps (the T3i keeps up either way). canon-webcam therefore switches ALO off while streaming and puts your setting back when it stops; `--keep-alo` leaves it alone. If canon-webcam is force-quit or the camera is unplugged while streaming, the next run with that camera restores it. With the mode dial on the movie position, a T3i refuses setting changes, so ALO stays as it is (the movie position has its own ALO setting); P or M avoids that. Shutter speed, ISO, autofocus method, picture style and live-view size made no real difference in our tests, and movie mode is no faster. A true 30 or 60 needs the camera's HDMI output and a capture device, and on the T5 that output includes the camera's on-screen information.
+- **Frame rate.** Over USB a Rebel T3i delivers its full 30 live-view frames per second and a Rebel T5 about 28; canon-webcam passes each frame on as soon as it arrives, so apps get the camera's own rate with the least delay (`--fps N` sends a steady N instead, repeating frames to fill gaps). Both run live view on a 30 fps clock, but on the T5 the **Auto Lighting Optimizer** (ALO) processing makes it miss slots: with ALO on, it manages about 21 fps (the T3i keeps up either way). canon-webcam therefore switches ALO off while streaming and puts your setting back when it stops; `--keep-alo` leaves it alone. If canon-webcam is force-quit or the camera is unplugged while streaming, the next run with that camera restores it. With the mode dial on the movie position, a T3i refuses setting changes, so ALO stays as it is (the movie position has its own ALO setting); P or M avoids that. Shutter speed, ISO, autofocus method, picture style and live-view size made no real difference in our tests, and movie mode is no faster. A true 30 or 60 needs the camera's HDMI output and a capture device, and on the T5 that output includes the camera's on-screen information.
 - **Camera screen.** While streaming, live view also shows on the camera's own screen, which helps with framing and focus; it costs no frame rate. `--no-camera-screen` turns it off.
 - **Focus** once, manually or with a half-press, before you start. These bodies have no continuous autofocus in live view.
 - **Power.** Live view drains the battery in well under an hour. Use an AC dummy battery: Canon ACK-E8 for the T3i (LP-E8), ACK-E10 for the T5 (LP-E10), or a third-party equivalent.

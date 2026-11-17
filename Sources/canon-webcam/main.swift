@@ -17,8 +17,8 @@ USAGE
       --fit          show the whole 3:2 frame with side bars (default: crop to 16:9)
       --expose       set 1/60s and ISO Auto on connect (mode dial on M)
       --fps N        send video apps a steady N frames per second, repeating the
-                     newest camera frame when the next isn't ready (default: 24;
-                     0 sends each camera frame as soon as it arrives)
+                     newest camera frame when the next isn't ready (default: 0,
+                     each camera frame as soon as it arrives)
       --keep-alo     leave Auto Lighting Optimizer as set on the camera. By default
                      it is switched off while streaming (about 28 instead of 21
                      fps on a Rebel T5) and restored when canon-webcam stops
@@ -330,7 +330,7 @@ case "run":
     var cameraName = "OBS Virtual Camera"
     var mode = FrameRenderer.Mode.fill
     var exposeOnConnect = false
-    var fps = 24.0
+    var fps = 0.0
     var direct = true
     var keepALO = false
     var cameraScreen = true

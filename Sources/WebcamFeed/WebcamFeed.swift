@@ -8,9 +8,10 @@ import VirtualCamera
 public struct FeedSettings: Equatable {
     /// The virtual camera to feed.
     public var cameraName = "OBS Virtual Camera"
-    /// Frames per second sent to video apps, repeating the newest camera frame
-    /// when the next isn't ready. 0 sends each camera frame as it arrives.
-    public var outputFPS: Double = 24
+    /// 0 (the default) sends each camera frame to video apps as it arrives:
+    /// the camera's own rate, nothing added. N sends a steady N per second,
+    /// repeating the newest camera frame when the next isn't ready.
+    public var outputFPS: Double = 0
     public var mode: FrameRenderer.Mode = .fill
     public var liveView = LiveViewOptions()
 
@@ -35,7 +36,7 @@ public enum FeedStatus: Equatable {
 }
 
 /// Streams the DSLR's live view into a virtual camera: frames in from
-/// `LiveView`, a steady frame rate out, reconnecting to either side when it
+/// `LiveView`, frames out to video apps, reconnecting to either side when it
 /// goes away. Shared by the command-line tool and the menu bar app.
 /// Thread-safe: state is behind a lock, so `start`/`stop` can run on any queue
 /// (set `onChange`/`onLog` before starting).
@@ -196,7 +197,7 @@ public final class WebcamFeed: @unchecked Sendable {
         let name = settings.cameraName
         let fps = settings.outputFPS
 
-        // Output clock: video apps get frames at a steady rate. When the camera
+        // Output clock (--fps N): video apps get frames at a steady rate. When the camera
         // hasn't produced a new frame yet, the newest one is sent again; after a
         // second without frames (camera stalled or unplugged) nothing is sent.
         var all: [DispatchSourceTimer] = []
