@@ -91,6 +91,8 @@ final class AppModel: ObservableObject {
     // MARK: Preview (only while the panel is open)
 
     func panelAppeared() {
+        // Camera access may have been switched on in System Settings since.
+        if isOn, case .problem(.cameraAccessDenied) = status { startFeed() }
         updatePreview()
         previewTimer?.invalidate()
         // As often as the camera can deliver, so the preview moves like the video.

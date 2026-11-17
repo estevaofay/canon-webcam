@@ -72,6 +72,22 @@ final class WebcamFeedTests: XCTestCase {
         XCTAssertEqual(connects, 0)
     }
 
+    func testStartingAgainAfterAccessIsGrantedStreams() {
+        let lock = NSLock()
+        var allowed = false
+        let feed = WebcamFeed(settings: FeedSettings(), liveView: LiveView(connect: { _ in JPEGCamera() }),
+                              openSink: { _ in FakeSink() }, cameraAccess: { lock.withLock { allowed } })
+        feed.start()
+        defer { feed.stop() }
+        XCTAssertEqual(feed.status, .problem(.cameraAccessDenied))
+
+        // The user turns camera access on in System Settings; the app starts
+        // the feed again (when its panel opens).
+        lock.withLock { allowed = true }
+        feed.start()
+        XCTAssertTrue(wait(2) { if case .live = feed.status { return true }; return false }, "\(feed.status)")
+    }
+
     func testMissingVirtualCameraRecovers() {
         let sink = FakeSink()
         let lock = NSLock()
