@@ -1,4 +1,5 @@
 import CLibUSB
+import CryptoKit
 import Foundation
 
 /// Errors from the direct USB live-view path.
@@ -87,6 +88,10 @@ public final class DirectLiveView {
 
     /// The camera's model name, e.g. "Canon EOS 1200D" (Rebel T5).
     public private(set) var model = ""
+    /// Set when the camera's Auto Lighting Optimizer could not be switched off
+    /// (live view then runs slower), saying why.
+    public private(set) var autoLightingOptimizerProblem: String?
+    private var serialNumber = ""
 
     private var context: OpaquePointer?
     private var handle: OpaquePointer?
@@ -332,39 +337,52 @@ public final class DirectLiveView {
     private static let autoLightingOptimizerOff: UInt32 = 3
 
     /// Where the camera's own ALO setting is kept while canon-webcam has it
-    /// switched off, so it can still be restored if canon-webcam is killed
-    /// before it gets the chance (the next run puts it back).
-    private static var savedSettingFile: URL {
-        FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Support/canon-webcam/auto-lighting-optimizer")
+    /// switched off, so it can still be restored if canon-webcam is killed, or
+    /// the camera unplugged, before it gets the chance: the next run with the
+    /// same camera puts it back. One file per camera body, named after a hash
+    /// of its model and serial number.
+    private var savedSettingFile: URL {
+        let digest = SHA256.hash(data: Data("\(model)\n\(serialNumber)".utf8))
+        let id = digest.prefix(6).map { String(format: "%02x", $0) }.joined()
+        return FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/canon-webcam/auto-lighting-optimizer-\(id)")
     }
 
     private func switchOffAutoLightingOptimizer(settings: [UInt32: UInt32]) throws {
         guard let current = settings[Prop.autoLightingOptimizer] else { return }  // not on this model
+        let file = savedSettingFile
         // If a previous run was killed while ALO was off, the camera now reports
         // "off": the setting to restore is the one saved by that run.
-        let saved = (try? String(contentsOf: Self.savedSettingFile, encoding: .utf8))
+        let saved = (try? String(contentsOf: file, encoding: .utf8))
             .flatMap { UInt32($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
         let original = (current == Self.autoLightingOptimizerOff ? saved : nil) ?? current
         guard original != Self.autoLightingOptimizerOff else {
-            try? FileManager.default.removeItem(at: Self.savedSettingFile)
+            try? FileManager.default.removeItem(at: file)
             return  // the user keeps ALO off anyway
         }
-        try? FileManager.default.createDirectory(
-            at: Self.savedSettingFile.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try? "\(original)\n".write(to: Self.savedSettingFile, atomically: true, encoding: .utf8)
-        savedAutoLightingOptimizer = original
         if current != Self.autoLightingOptimizerOff {
-            try expect(setProperty(Prop.autoLightingOptimizer, Self.autoLightingOptimizerOff),
-                       "turn off Auto Lighting Optimizer")
+            let result = try setPropertyWhenReady(Prop.autoLightingOptimizer, Self.autoLightingOptimizerOff)
+            guard result == Response.ok else {
+                // Not worth refusing to stream over. A T3i with its mode dial on
+                // the movie position answers "busy" to every setting change.
+                autoLightingOptimizerProblem = "could not switch off Auto Lighting Optimizer "
+                    + "(camera answered \(result == Response.deviceBusy ? "busy" : "0x" + String(result, radix: 16))), "
+                    + "so live view may be slower; "
+                    + "with the mode dial on P or M it works"
+                return
+            }
         }
+        try? FileManager.default.createDirectory(
+            at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? "\(original)\n".write(to: file, atomically: true, encoding: .utf8)
+        savedAutoLightingOptimizer = original
     }
 
     private func restoreAutoLightingOptimizer() {
         guard let original = savedAutoLightingOptimizer else { return }
-        if (try? setProperty(Prop.autoLightingOptimizer, original)) == Response.ok {
+        if (try? setPropertyWhenReady(Prop.autoLightingOptimizer, original)) == Response.ok {
             savedAutoLightingOptimizer = nil
-            try? FileManager.default.removeItem(at: Self.savedSettingFile)
+            try? FileManager.default.removeItem(at: savedSettingFile)
         }
     }
 
@@ -422,6 +440,20 @@ public final class DirectLiveView {
 
     private func expect(_ result: UInt16, _ action: String) throws {
         if result != Response.ok { throw PTPError(kind: .response(result), action: action) }
+    }
+
+    /// Sets a property, retrying for up to about two seconds while the camera
+    /// answers "busy" (it does for a while after connecting, and while it is
+    /// handing out live-view frames).
+    private func setPropertyWhenReady(_ property: UInt32, _ value: UInt32) throws -> UInt16 {
+        var result = Response.deviceBusy
+        for _ in 0..<20 {
+            result = try setProperty(property, value)
+            if result != Response.deviceBusy { break }
+            _ = try transaction(Op.getEvent)
+            usleep(100_000)
+        }
+        return result
     }
 
     private func setProperty(_ property: UInt32, _ value: UInt32) throws -> UInt16 {
@@ -565,5 +597,7 @@ public final class DirectLiveView {
         _ = try u16Array()  // image formats
         _ = try string()    // manufacturer
         model = try string()
+        _ = try? string()   // device version
+        serialNumber = (try? string()) ?? ""  // only used, hashed, to name the saved-ALO file
     }
 }

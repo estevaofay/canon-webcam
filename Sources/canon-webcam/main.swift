@@ -202,6 +202,7 @@ func run(cameraName: String, mode: FrameRenderer.Mode, expose: Bool, fps: Double
         case let .connected(model, direct):
             log("camera connected: \(model), live view on (\(direct ? "direct USB" : "libgphoto2"))")
         case let .waiting(reason): log("waiting: \(reason)")
+        case let .notice(message): log("note: \(message)")
         }
     }
     live.onFrame = { jpeg in
@@ -294,6 +295,7 @@ func check(cameraName: String, seconds: Double) -> Never {
         switch event {
         case let .connected(model, _): log("camera connected: \(model)")
         case let .waiting(reason): log("waiting: \(reason)")
+        case let .notice(message): log("note: \(message)")
         }
     }
     live.onFrame = { jpeg in
@@ -435,6 +437,7 @@ func bench(seconds: Double, direct: Bool, keepALO: Bool) -> Never {
         case let .connected(model, direct):
             log("\(model) (\(direct ? "direct USB" : "libgphoto2")): measuring for \(Int(seconds))s after the first frame…")
         case let .waiting(reason): log("waiting: \(reason)")
+        case let .notice(message): log("note: \(message)")
         }
     }
     live.onFrame = { jpeg in

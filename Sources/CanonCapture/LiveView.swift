@@ -22,10 +22,12 @@ public final class LiveView {
         /// false when they come through libgphoto2.
         case connected(model: String, direct: Bool)
         case waiting(reason: String)
+        /// Streaming works, but something is worth telling the user.
+        case notice(String)
     }
 
-    /// Use the fast direct-USB live view for Canon EOS cameras (about 21 fps on
-    /// a Rebel T5, against about 14 through libgphoto2). Other cameras, and
+    /// Use the fast direct-USB live view for Canon EOS cameras (about 28 fps on
+    /// a Rebel T5 and 30 on a T3i, against about 14 through libgphoto2). Other cameras, and
     /// Canon models without EOS live view, always use libgphoto2.
     public var preferDirectUSB = true
 
@@ -112,6 +114,7 @@ public final class LiveView {
                 continue
             }
             onEvent(.connected(model: camera.model, direct: camera is DirectLiveView))
+            if let problem = (camera as? DirectLiveView)?.autoLightingOptimizerProblem { onEvent(.notice(problem)) }
             lastReason = ""
 
             var failures = 0
